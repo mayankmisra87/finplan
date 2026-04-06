@@ -1,0 +1,92 @@
+{
+  "dob": "1985-06-01",
+  "retirementAge": 58,
+  "lifeExpectancy": 85,
+  "monthlyIncome": 200000,
+  "monthlyExpense": 120000,
+  "incomeParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 7 }],
+  "expenseParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 6 }],
+  "incomes": [
+    {
+      "id": 10, "name": "Rental Income",
+      "amount": 25000, "payout_frequency": "Monthly",
+      "growth_rate": 5,
+      "start_date": "2026-04-01", "end_date": "2040-01-01",
+      "original_start_date": "2026-04-01", "original_end_date": "2040-01-01"
+    }
+  ],
+  "loans": [],
+  "sips": [
+    { "id": 1, "name": "Equity SIP", "amount": 15000,
+      "equity_percentage": 0.8, "debt_percentage": 0.15, "liquid_percentage": 0.05 }
+  ],
+  "goals": [
+    {
+      "id": 9001, "name": "Retirement", "icon": "default",
+      "start_date": "R", "end_date": "L",
+      "original_start_date": "R", "original_end_date": "L",
+      "target_amount": 0, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
+    },
+    {
+      "id": 9002, "name": "Emergency Fund", "icon": "default",
+      "start_date": "2026-04-01", "end_date": "2026-04-01",
+      "original_start_date": "2026-04-01", "original_end_date": "2026-04-01",
+      "target_amount": 720000, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
+    },
+    {
+      "id": 1, "name": "Home Purchase", "icon": "home",
+      "start_date": "2027-01-01", "end_date": "2027-01-01",
+      "original_start_date": "2027-01-01", "original_end_date": "2027-01-01",
+      "target_amount": 15000000, "is_loan": true,
+      "down_payment": 20, "loan_tenure": 20, "loan_interest_rate": 8.5, "priority": 2
+    },
+    {
+      "id": 2, "name": "Child Education", "icon": "kids-education",
+      "start_date": "2033-01-01", "end_date": "2033-01-01",
+      "original_start_date": "2033-01-01", "original_end_date": "2033-01-01",
+      "target_amount": 4000000, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 2
+    },
+    {
+      "id": 3, "name": "Child Marriage", "icon": "marriage",
+      "start_date": "2038-01-01", "end_date": "2038-01-01",
+      "original_start_date": "2038-01-01", "original_end_date": "2038-01-01",
+      "target_amount": 2500000, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 3
+    }
+  ],
+  "portfolioParams": [
+    {
+      "id": 101, "asset_type": "FD",
+      "maturity_date": "2027-06-01",
+      "maturity_amount": 1000000,
+      "is_breakable": true,
+      "interests": [
+        { "date": "2026-06-01", "amount": 70000 },
+        { "date": "2027-06-01", "amount": 75000 }
+      ]
+    }
+  ],
+  "assetAllocation": [
+    { "years": 3,   "equity": 0.30, "debt": 0.50, "liquid": 0.20 },
+    { "years": 7,   "equity": 0.60, "debt": 0.30, "liquid": 0.10 },
+    { "years": 100, "equity": 0.80, "debt": 0.15, "liquid": 0.05 }
+  ],
+  "retirementAssetAllocation": [
+    { "years": 3,   "equity": 0.20, "debt": 0.60, "liquid": 0.20 },
+    { "years": 7,   "equity": 0.50, "debt": 0.40, "liquid": 0.10 },
+    { "years": 100, "equity": 0.70, "debt": 0.25, "liquid": 0.05 }
+  ],
+  "currentPortfolioValue": 3500000,
+  "portfolioBreakup": {
+    "Equity": { "Amount": 2000000 },
+    "Debt":   { "Amount": 1000000 },
+    "Liquid": { "Amount": 500000  }
+  },
+  "retirementBasedCashflows": [
+    { "id": 201, "asset_type": "EPF", "market_value": 1200000, "epf_last_contribution": 72000 },
+    { "id": 202, "asset_type": "PPF", "market_value": 800000,  "epf_last_contribution": 0 }
+  ]
+}
