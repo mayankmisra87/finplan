@@ -119,6 +119,12 @@ type interestEntry struct {
 
 // FinancialSolution runs the goal-funding waterfall.
 // Parameters match the JS version exactly.
+//
+// lumpsumPerGoal is the pre-computed lumpsum budget per goal-ID produced
+// by twoPassLumpsumAllocation.  When an entry is present for a goal the
+// waterfall caps the lumpsum it takes for that goal at the pre-allocated
+// amount, ensuring the remainder is preserved for retirement.  Pass nil
+// to fall back to the original greedy allocation behaviour.
 func FinancialSolution(
 	retirementAge, lifeExpectancy int,
 	currentPortfolioValue, initialLiquidAmount float64,
@@ -133,6 +139,7 @@ func FinancialSolution(
 	loanEmis map[string]float64,
 	totalSipAmount float64,
 	avgExpenseGrowth float64, // FIX #2: needed for compounded inflation buffer
+	lumpsumPerGoal map[int]float64, // two-pass pre-allocation; nil = greedy
 ) ([]GoalResult, []SIPSchedule) {
 
 	today := todayFirstOfMonth()
@@ -279,11 +286,25 @@ func FinancialSolution(
 
 		if lumpsumFV > 0 {
 			requiredLumpsum := remainingGoalValue / lumpsumFV
+
+			// If the two-pass pre-allocated a specific budget for this goal,
+			// cap what the waterfall takes so that retirement's reserved share
+			// stays in remainingPortfolio.  Retirement goals (icon == "default")
+			// are not capped — they receive whatever is left.
+			if preAlloc, ok := lumpsumPerGoal[g.ID]; ok && g.Icon != "default" {
+				if requiredLumpsum > preAlloc {
+					requiredLumpsum = preAlloc
+				}
+			}
+
 			if state.remainingPortfolio >= requiredLumpsum {
 				state.remainingPortfolio -= requiredLumpsum
 				attachments[g.ID].lumpsum = requiredLumpsum
-				attachments[g.ID].expectedLumpsum = remainingGoalValue
-				remainingGoalValue = 0
+				attachments[g.ID].expectedLumpsum = requiredLumpsum * lumpsumFV
+				remainingGoalValue -= requiredLumpsum * lumpsumFV
+				if remainingGoalValue < 0 {
+					remainingGoalValue = 0
+				}
 			} else {
 				remainingGoalValue -= state.remainingPortfolio * lumpsumFV
 				attachments[g.ID].lumpsum = state.remainingPortfolio

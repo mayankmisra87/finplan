@@ -7,12 +7,15 @@ import "time"
 // allowing it to compound toward retirement instead.
 //
 // The logic:
-//  Pass 1 — Simulate each non-retirement goal using savings only
-//            (no lumpsum). Determine which goals savings can fully cover.
-//  Pass 2 — For goals that savings cannot cover, allocate the minimum
-//            lumpsum required to make them COMFORTABLE. Whatever
-//            lumpsum remains after closing all addressable gaps is
-//            preserved for the retirement goal.
+//
+//	Pass 1 — Simulate each non-retirement goal using savings only
+//	          (no lumpsum) via simulateSavingsCoverage, which mirrors
+//	          FinancialSolution's inner loop exactly.
+//	          Determine which goals savings can fully cover.
+//	Pass 2 — For goals that savings cannot cover, allocate the minimum
+//	          lumpsum required to make them COMFORTABLE. Whatever
+//	          lumpsum remains after closing all addressable gaps is
+//	          preserved for the retirement goal.
 //
 // Returns: per-goal lumpsum allocation map (goalID → amount)
 // and the remaining lumpsum to reserve for retirement.
@@ -20,11 +23,16 @@ func twoPassLumpsumAllocation(
 	goals []Goal,
 	goalsAllocation AllGoalsAllocation,
 	totalLumpsum float64,
-	monthlySurplus float64, // approximate starting surplus
+	monthlyIncome float64,
+	monthlyExpense float64,
 	incomeGrowth map[int]float64,
+	expenseGrowth map[int]float64,
 	portfolioParams []PortfolioParam,
 	windfalls []windfall,
 	loanEmis map[string]float64,
+	totalSipAmount float64,
+	extraIncomes []extraIncomeItem,
+	retirementDate time.Time,
 	avgExpenseGrowth float64,
 ) (map[int]float64, float64) {
 
@@ -57,13 +65,14 @@ func twoPassLumpsumAllocation(
 		}
 		goalTarget := effectiveGoalTarget(g) * inflationFactor
 
-		// Pass 1: estimate what savings alone can achieve
-		// Approximate by summing monthly surplus × growth FV factor
-		// over the months until the goal. This is a heuristic — the
-		// full savings simulation happens in FinancialSolution.
-		savingsAchievable := estimateSavingsCoverage(
-			monthlySurplus, incomeGrowth, loanEmis,
-			alloc, today, goalDate, portfolioParams, windfalls,
+		// Pass 1: exact simulation of what savings alone can achieve.
+		// Mirrors FinancialSolution's savings loop — no lumpsum deducted.
+		savingsAchievable := simulateSavingsCoverage(
+			monthlyIncome, monthlyExpense,
+			incomeGrowth, expenseGrowth,
+			loanEmis, totalSipAmount, extraIncomes,
+			alloc, today, goalDate,
+			portfolioParams, windfalls, retirementDate,
 		)
 
 		if savingsAchievable >= goalTarget {
@@ -93,62 +102,118 @@ func twoPassLumpsumAllocation(
 	return lumpsumPerGoal, remainingLumpsum
 }
 
-// estimateSavingsCoverage is a lightweight approximation of how much
-// a savings stream (growing with income) will produce toward a goal
-// by its target date, taking into account known loan EMI deductions
-// and existing cashflows (FD maturities, windfalls).
-//
-// This is intentionally approximate — the full month-by-month simulation
-// happens in FinancialSolution. Here we just need to know: can savings
-// alone plausibly cover this goal?
-func estimateSavingsCoverage(
-	monthlySurplus float64,
+// simulateSavingsCoverage is an exact month-by-month simulation of how
+// much a savings stream will produce toward a goal by its target date,
+// with no lumpsum contribution. It mirrors FinancialSolution's inner
+// savings loop faithfully:
+//   - income and expense grow annually via their respective growth maps
+//   - SIP is deducted from surplus while income exceeds expenses
+//   - retirement transition zeros income and SIP
+//   - extra recurring incomes are included and grown annually
+//   - windfalls are credited on their start date
+//   - maturing FD amounts and interest payouts are credited on their dates
+//     (non-breakable FDs are skipped until their maturity date)
+func simulateSavingsCoverage(
+	monthlyIncome float64,
+	monthlyExpense float64,
 	incomeGrowth map[int]float64,
+	expenseGrowth map[int]float64,
 	loanEmis map[string]float64,
+	totalSipAmount float64,
+	extraIncomes []extraIncomeItem,
 	alloc GoalAllocation,
 	startDate, goalDate time.Time,
 	portfolioParams []PortfolioParam,
 	windfalls []windfall,
+	retirementDate time.Time,
 ) float64 {
 
 	total := 0.0
 	current := startDate
-	surplus := monthlySurplus
 	currentYear := startDate.Year()
+	income := monthlyIncome
+	expense := monthlyExpense
+	sip := totalSipAmount
+	isRetired := false
+
+	// Copy extra incomes so annual growth mutations stay local.
+	currentExtraIncomes := make([]extraIncomeItem, len(extraIncomes))
+	copy(currentExtraIncomes, extraIncomes)
 
 	for current.Before(goalDate) {
 		yr := current.Year()
+		stringDate := formatDate(current)
+
+		// Year rollover: apply income/expense/extra-income growth.
 		if yr != currentYear {
-			if rate, ok := incomeGrowth[currentYear]; ok {
-				surplus *= (1 + rate/100)
+			if !isRetired {
+				if rate, ok := incomeGrowth[currentYear]; ok {
+					income *= (1 + rate/100)
+				}
+			}
+			if rate, ok := expenseGrowth[currentYear]; ok {
+				expense *= (1 + rate/100)
+			}
+			for j, e := range currentExtraIncomes {
+				if stringDate >= e.StartDate && stringDate < e.EndDate {
+					currentExtraIncomes[j].Amount *= (1 + e.Growth/100)
+				}
 			}
 			currentYear = yr
 		}
 
-		stringDate := formatDate(current)
-		s := surplus
-		if emi, ok := loanEmis[stringDate]; ok {
-			s -= emi
+		// Retirement transition: income and SIP stop.
+		if current.After(retirementDate) && !isRetired {
+			income = 0
+			sip = 0
+			isRetired = true
 		}
 
-		fvMultiplier := 1.0
+		currentFV := 1.0
 		if ya, ok := alloc[yr]; ok {
-			fvMultiplier = ya.FV
+			currentFV = ya.FV
 		}
 
-		if s > 0 {
-			total += s * fvMultiplier
+		// Monthly saving (mirrors FinancialSolution logic).
+		monthlySaving := income - expense
+		if emi, ok := loanEmis[stringDate]; ok {
+			monthlySaving -= emi
+		}
+		if sip > 0 && sip < monthlySaving {
+			monthlySaving -= sip
+		}
+		if monthlySaving > 0 {
+			total += monthlySaving * currentFV
 		}
 
-		// Add windfalls and maturing FDs that arrive before goal date
-		for _, w := range windfalls {
-			if w.StartDate == stringDate {
-				total += w.Amount * fvMultiplier
+		// Extra recurring incomes.
+		for _, e := range currentExtraIncomes {
+			eStart := parseDate(e.StartDate)
+			eEnd := parseDate(e.EndDate)
+			if !current.Before(eStart) && !current.After(eEnd) {
+				total += e.Amount * currentFV
 			}
 		}
+
+		// Windfalls.
+		for _, w := range windfalls {
+			if w.StartDate == stringDate {
+				total += w.Amount * currentFV
+			}
+		}
+
+		// Maturing investments and interest payouts.
 		for _, pp := range portfolioParams {
+			if !pp.IsBreakable && current.Before(parseDate(pp.MaturityDate)) {
+				continue
+			}
 			if pp.MaturityDate == stringDate {
-				total += pp.MaturityAmount * fvMultiplier
+				total += pp.MaturityAmount * currentFV
+			}
+			for _, interest := range pp.Interests {
+				if interest.Date == stringDate {
+					total += interest.Amount * currentFV
+				}
 			}
 		}
 

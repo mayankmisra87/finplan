@@ -7,16 +7,17 @@ import (
 
 // RunPlan is the top-level entry point.
 // It mirrors fixFinancials() in financial-timeline.js and orchestrates:
-//   1. PPF / EPF cashflow setup
-//   2. Date expansion (R/L tokens)
-//   3. Loan EMI map construction
-//   4. Future income / windfall map construction
-//   5. Income and expense growth map construction
-//   6. SIP allocation derivation
-//   7. Two-pass lumpsum optimisation (new)
-//   8. OverallFVAllocation
-//   9. FinancialSolution (core waterfall)
-//  10. Ideal asset allocation calculation
+//  1.  PPF / EPF cashflow setup
+//  2.  Date expansion (R/L tokens)
+//  3.  Loan EMI map construction
+//  4.  Future income / windfall map construction
+//  5.  Income and expense growth map construction
+//  6.  SIP allocation derivation
+//  7.  Per-goal FV allocation (OverallFVAllocation)
+//  8.  Extra income items construction
+//  9.  Two-pass lumpsum optimisation (exact savings simulation)
+//  10. FinancialSolution (core waterfall, retirement-first lumpsum)
+//  11. Ideal asset allocation calculation
 func RunPlan(p PlanParams) PlanResult {
 	// ── Deep-copy mutable slices ──────────────────────────────────────────
 	goals := make([]Goal, len(p.Goals))
@@ -187,9 +188,6 @@ func RunPlan(p PlanParams) PlanResult {
 	)
 
 	// ── 8. Build extra income items ─────────────────────────────────────
-	monthlySurplus := p.MonthlyIncome - p.MonthlyExpense
-	_ = monthlySurplus // used by two-pass in future
-
 	extraIncomeItems := make([]extraIncomeItem, 0, len(fi))
 	for _, inc := range fi {
 		months := NumMonths[inc.PayoutFrequency]
@@ -206,16 +204,36 @@ func RunPlan(p PlanParams) PlanResult {
 		})
 	}
 
-	// ── 9. Run core waterfall ─────────────────────────────────────────────
-	// Pass the full portfolio value — the waterfall allocates it naturally.
-	// The two-pass optimisation is wired in as goal ordering (retirement
-	// gets its required lumpsum via the normal sequential waterfall).
-	// A full two-pass implementation can be layered on top later without
-	// changing the FinancialSolution interface.
+	// ── 9. Two-pass lumpsum optimisation ─────────────────────────────────
+	// Determine the minimum lumpsum needed for each non-retirement goal so
+	// that the remainder is preserved for retirement.  The exact savings
+	// simulation (simulateSavingsCoverage) mirrors the FinancialSolution
+	// inner loop, so Pass 1 is free of approximation errors.
+	lumpsumPerGoal, _ := twoPassLumpsumAllocation(
+		goals,
+		goalsAllocation,
+		p.CurrentPortfolioValue,
+		p.MonthlyIncome,
+		p.MonthlyExpense,
+		incomeGrowth,
+		expenseGrowth,
+		portfolioParams,
+		wfList,
+		loanEmis,
+		totalSip,
+		extraIncomeItems,
+		retirementDate,
+		avgExpenseGrowth,
+	)
+
+	// ── 10. Run core waterfall ────────────────────────────────────────────
+	// lumpsumPerGoal caps each non-retirement goal's lumpsum draw so that
+	// retirement's reserved share stays in remainingPortfolio until the
+	// retirement goal is processed.
 	goalResults, sipSchedule := FinancialSolution(
 		p.RetirementAge, p.LifeExpectancy,
-		p.CurrentPortfolioValue, // full portfolio — waterfall decides allocation
-		0,                       // initialLiquidAmount (windfalls handled separately)
+		p.CurrentPortfolioValue,
+		0, // initialLiquidAmount (windfalls handled separately)
 		p.MonthlyIncome, p.MonthlyExpense, retirementExpense,
 		incomeGrowth, expenseGrowth,
 		portfolioParams,
@@ -227,9 +245,10 @@ func RunPlan(p PlanParams) PlanResult {
 		loanEmis,
 		totalSip,
 		avgExpenseGrowth,
+		lumpsumPerGoal,
 	)
 
-	// ── 10. Compute ideal asset allocation ────────────────────────────────
+	// ── 11. Compute ideal asset allocation ───────────────────────────────
 	type goalEquityItem struct {
 		goalTarget float64
 		lumpsum    float64
