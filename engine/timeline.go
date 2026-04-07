@@ -7,7 +7,7 @@ import (
 
 // RunPlan is the top-level entry point.
 // It mirrors fixFinancials() in financial-timeline.js and orchestrates:
-//  1.  PPF / EPF cashflow setup
+//  1.  PPF / EPF / NPS cashflow setup (NPS: 60% lump sum + 40% annuity)
 //  2.  Date expansion (R/L tokens)
 //  3.  Loan EMI map construction
 //  4.  Future income / windfall map construction
@@ -37,7 +37,12 @@ func RunPlan(p PlanParams) PlanResult {
 	}
 	n := math.Max(0, float64(parseDate(retirementDateStr).Year()-today.Year()))
 
-	// ── 1. Attach PPF / EPF as retirement-date cashflows ─────────────────
+	// ── 1. Attach PPF / EPF / NPS as retirement-date cashflows ──────────
+	// npsAnnuityItems accumulates the 40% annuity streams from NPS holdings;
+	// they are appended to extraIncomeItems in step 8.
+	npsAnnuityItems := []extraIncomeItem{}
+	lifeExpEndDate := formatDate(dobDate.AddDate(p.LifeExpectancy, 0, 0))
+
 	for _, rc := range p.RetirementBasedCashflows {
 		switch rc.AssetType {
 		case "PPF":
@@ -63,6 +68,36 @@ func RunPlan(p PlanParams) PlanResult {
 				MaturityAmount: rc.MarketValue,
 				IsBreakable:  false, // FIX #5: EPF cannot be redeemed early
 				Interests:    []Interest{{Date: retirementDateStr, Amount: interest}},
+			})
+		case "NPS":
+			// Grow the NPS corpus at the Tier-1 equity rate.
+			contrib := rc.NPSLastContribution
+			if contrib == 0 {
+				contrib = 60000 // fallback: ₹60k annual contribution
+			}
+			npsCorpus := fv(NPSRate, n, contrib, rc.MarketValue)
+
+			// 60% lump sum — tax-free withdrawal, arrives at retirement.
+			lumpsum := npsCorpus * NPSLumpsumFraction
+			portfolioParams = append(portfolioParams, PortfolioParam{
+				ID:             rc.ID,
+				AssetType:      "NPS",
+				MaturityDate:   retirementDateStr,
+				MaturityAmount: lumpsum,
+				IsBreakable:    true,
+				Interests:      []Interest{},
+			})
+
+			// 40% annuity — fixed monthly income from retirement to end of life.
+			annuityCorpus := npsCorpus * NPSAnnuityFraction
+			monthlyAnnuity := annuityCorpus * NPSAnnuityRate / 12
+			npsAnnuityItems = append(npsAnnuityItems, extraIncomeItem{
+				ID:        rc.ID,
+				Name:      "NPS Annuity",
+				Amount:    monthlyAnnuity,
+				Growth:    0, // annuity payouts are contractually fixed
+				StartDate: retirementDateStr,
+				EndDate:   lifeExpEndDate,
 			})
 		}
 	}
@@ -204,6 +239,10 @@ func RunPlan(p PlanParams) PlanResult {
 			EndDate:   inc.EndDate,
 		})
 	}
+	// Append NPS annuity streams collected in step 1.
+	// These are fixed monthly incomes from retirement to end of life that
+	// reduce the net cash the retirement corpus must fund.
+	extraIncomeItems = append(extraIncomeItems, npsAnnuityItems...)
 
 	// ── 9. Two-pass lumpsum optimisation ─────────────────────────────────
 	// Determine the minimum lumpsum needed for each non-retirement goal so
@@ -353,11 +392,13 @@ func RunPlan(p PlanParams) PlanResult {
 		}
 	}
 
-	// Sum PPF + EPF maturity principal and accrued interest at retirement.
+	// Sum PPF + EPF + NPS(60%) lump sums at retirement.
 	// These are the ring-fenced cashflows added in step 1.
+	// NPS MaturityAmount already holds only the 60% lump sum fraction;
+	// the 40% annuity is modelled as extra income and is not counted here.
 	ppfEPFAtRetirement := 0.0
 	for _, pp := range portfolioParams {
-		if pp.AssetType == "PPF" || pp.AssetType == "EPF" {
+		if pp.AssetType == "PPF" || pp.AssetType == "EPF" || pp.AssetType == "NPS" {
 			ppfEPFAtRetirement += pp.MaturityAmount
 			for _, interest := range pp.Interests {
 				ppfEPFAtRetirement += interest.Amount

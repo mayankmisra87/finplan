@@ -93,12 +93,15 @@ type PortfolioBreakup struct {
 	Liquid struct{ Amount float64 } `json:"Liquid"`
 }
 
-// RetirementCashflow is a PPF or EPF holding that matures at retirement.
+// RetirementCashflow is a long-term retirement asset (PPF, EPF, or NPS)
+// that is modelled separately from the liquid portfolio because it matures
+// at or after retirement and has special payout rules.
 type RetirementCashflow struct {
 	ID                  int     `json:"id"`
-	AssetType           string  `json:"asset_type"`
-	MarketValue         float64 `json:"market_value"`
-	EPFLastContribution float64 `json:"epf_last_contribution"` // annual, EPF only
+	AssetType           string  `json:"asset_type"`           // "PPF", "EPF", or "NPS"
+	MarketValue         float64 `json:"market_value"`         // current corpus / balance
+	EPFLastContribution float64 `json:"epf_last_contribution"` // annual EMployee+employer, EPF only
+	NPSLastContribution float64 `json:"nps_last_contribution"` // annual employee+employer, NPS only
 }
 
 // PlanParams is the complete input to the financial engine.

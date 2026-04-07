@@ -33,6 +33,19 @@ const PPFRate = 0.07
 // EPFRate is the assumed annual growth rate for EPF holdings (8.65%).
 const EPFRate = 0.0865
 
+// NPSRate is the assumed annual growth rate for NPS Tier-1 (equity-heavy).
+// PFRDA data shows long-run equity scheme returns around 10% p.a.
+const NPSRate = 0.10
+
+// NPS mandates a 60 / 40 split of the corpus at retirement.
+const NPSLumpsumFraction = 0.60 // 60% may be withdrawn tax-free as a lump sum
+const NPSAnnuityFraction = 0.40 // 40% must be used to buy a life annuity
+
+// NPSAnnuityRate is the annualised payout rate assumed when the 40% corpus
+// is used to buy a "Life Annuity with Return of Purchase Price" from an
+// IRDAI-registered annuity provider.  Industry average is ~6% p.a.
+const NPSAnnuityRate = 0.06
+
 // DefaultLongevityBuffer is the number of extra years added to
 // lifeExpectancy when computing the longevity-buffered corpus.
 // Improvement #9: makes longevity risk visible.

@@ -235,6 +235,95 @@ func TestRunPlanRetirementSIPPresent(t *testing.T) {
 	}
 }
 
+// ── NPS cashflow tests ────────────────────────────────────────────────────────
+
+func TestNPSSplitRetirementCashflow(t *testing.T) {
+	p := loadScenario(t, "../scenarios/nps_investor.json")
+	result := engine.RunPlan(p)
+
+	// Find the retirement goal result.
+	var retGoal *engine.GoalResult
+	for i := range result.Goals {
+		if result.Goals[i].Name == engine.GoalRetirement {
+			retGoal = &result.Goals[i]
+		}
+	}
+	if retGoal == nil {
+		t.Fatal("retirement goal not found in results")
+	}
+	t.Logf("Retirement corpus (TaxTotal): %.0f", retGoal.TaxTotal)
+	t.Logf("Retirement tag: %s", retGoal.Tag)
+	t.Logf("RetirementSIP: ₹%.0f/month", result.RetirementSIP)
+
+	// The NPS holding has market_value=15L and annual_contribution=1.44L.
+	// Growing at 10% for ~34 years it should produce a large corpus.
+	// The 60% lump sum must materially help fund retirement.
+	if retGoal.TaxTotal <= 0 {
+		t.Error("retirement corpus should be positive")
+	}
+
+	// RetirementSIP must be non-negative (≥0 is fine if NPS covers everything).
+	if result.RetirementSIP < 0 {
+		t.Error("RetirementSIP must not be negative")
+	}
+}
+
+func TestNPSAnnuityImprovesFunding(t *testing.T) {
+	// The NPS annuity (40%) is credited as extra income in the savings loop
+	// for the retirement goal, reducing the remaining goal value.  The NPS
+	// lump sum (60%) arrives as a maturing investment at retirement.
+	// Together they must make the retirement goal better-funded than without NPS.
+	pWith := loadScenario(t, "../scenarios/nps_investor.json")
+	pWithout := loadScenario(t, "../scenarios/nps_investor.json")
+	pWithout.RetirementBasedCashflows = nil // strip all retirement cashflows
+
+	rWith := engine.RunPlan(pWith)
+	rWithout := engine.RunPlan(pWithout)
+
+	var projWith, projWithout, shortWith, shortWithout float64
+	for _, g := range rWith.Goals {
+		if g.Name == engine.GoalRetirement {
+			projWith = g.ProjectedAmount
+			shortWith = g.ShortfallAmount
+		}
+	}
+	for _, g := range rWithout.Goals {
+		if g.Name == engine.GoalRetirement {
+			projWithout = g.ProjectedAmount
+			shortWithout = g.ShortfallAmount
+		}
+	}
+
+	t.Logf("Retirement projected WITH NPS:    %.0f  shortfall %.0f", projWith, shortWith)
+	t.Logf("Retirement projected WITHOUT NPS: %.0f  shortfall %.0f", projWithout, shortWithout)
+
+	// With NPS, projected must be ≥ without (NPS can only help, not hurt).
+	if projWith < projWithout {
+		t.Errorf("NPS should not reduce retirement projected amount: with=%.0f without=%.0f", projWith, projWithout)
+	}
+	if shortWith > shortWithout {
+		t.Errorf("NPS should not increase retirement shortfall: with=%.0f without=%.0f", shortWith, shortWithout)
+	}
+}
+
+func TestNPSRetirementSIPLowerWithNPS(t *testing.T) {
+	// RetirementSIP must be ≤ without NPS: the ring-fenced lump sum grows and
+	// covers more of the corpus, so a smaller monthly SIP is needed.
+	pWith := loadScenario(t, "../scenarios/nps_investor.json")
+	pWithout := loadScenario(t, "../scenarios/nps_investor.json")
+	pWithout.RetirementBasedCashflows = nil
+
+	rWith := engine.RunPlan(pWith)
+	rWithout := engine.RunPlan(pWithout)
+
+	t.Logf("RetirementSIP WITH NPS:    ₹%.0f/month", rWith.RetirementSIP)
+	t.Logf("RetirementSIP WITHOUT NPS: ₹%.0f/month", rWithout.RetirementSIP)
+
+	if rWith.RetirementSIP > rWithout.RetirementSIP {
+		t.Errorf("NPS should lower RetirementSIP: with=%.0f without=%.0f", rWith.RetirementSIP, rWithout.RetirementSIP)
+	}
+}
+
 // ── Monte Carlo smoke test ────────────────────────────────────────────────────
 
 func TestMonteCarloRuns(t *testing.T) {
