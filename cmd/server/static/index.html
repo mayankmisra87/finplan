@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>finplan</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --accent:#1a6b5a;--accent2:#e8f5f1;
+  --bad:#b91c1c;--warn:#b45309;
+  --muted:#6b7280;--border:#e5e7eb;--bg:#f9fafb;
+  --radius:10px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:#111;font-size:14px;line-height:1.6}
+.shell{display:grid;grid-template-columns:340px 1fr;min-height:100vh}
+.sidebar{background:#fff;border-right:1px solid var(--border);padding:24px;overflow-y:auto}
+.main{padding:28px 32px;overflow-y:auto}
+.logo{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:8px}
+.logo-dot{width:8px;height:8px;background:var(--accent);border-radius:50%}
+.sec{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:20px 0 10px}
+.field{margin-bottom:11px}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+input,select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;background:#fff;color:#111;outline:none;transition:border-color .15s}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,107,90,.1)}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.run-btn{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px;letter-spacing:.02em;transition:opacity .15s}
+.run-btn:hover{opacity:.88}
+.run-btn:disabled{opacity:.5;cursor:not-allowed}
+.mc-btn{width:100%;padding:9px;background:#fff;color:var(--accent);border:1.5px solid var(--accent);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px;transition:background .15s}
+.mc-btn:hover{background:var(--accent2)}
+.add-btn{width:100%;padding:7px;background:none;color:var(--accent);border:1.5px dashed var(--accent);border-radius:7px;font-size:12px;cursor:pointer;margin-top:6px}
+.gc{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:#fafafa;position:relative}
+.gc .rm{position:absolute;top:8px;right:8px;background:none;border:none;color:#ccc;font-size:16px;cursor:pointer;line-height:1;padding:0}
+.gc .rm:hover{color:var(--bad)}
+.surplus{border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:13px}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;color:var(--muted);gap:12px;text-align:center}
+.empty .ei{font-size:48px;opacity:.3}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:14px;color:var(--muted)}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rh{background:linear-gradient(135deg,#0a3d2e 0%,#1a6b5a 100%);border-radius:14px;padding:24px;color:#fff;margin-bottom:22px}
+.rh h1{font-size:22px;font-weight:600;margin-bottom:4px}
+.rh p{opacity:.75;font-size:13px}
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+.st{background:rgba(255,255,255,.12);border-radius:9px;padding:12px 14px}
+.st .v{font-size:20px;font-weight:600}
+.st .l{font-size:11px;opacity:.7;margin-top:2px}
+.sh{font-size:14px;font-weight:600;color:#111;margin:22px 0 12px}
+.cg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+.gr{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px}
+.gr .gh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.gr .gn{font-weight:600;font-size:14px}
+.gr .gd{font-size:11px;color:var(--muted);margin-top:2px}
+.tag{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.tC{background:#dcfce7;color:#166534}
+.tM{background:#fef3c7;color:#92400e}
+.tA{background:#ffedd5;color:#9a3412}
+.tU{background:#fee2e2;color:#991b1b}
+.nm{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;font-size:12px}
+.nl{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.04em;margin-bottom:2px}
+.nv{font-weight:600;font-size:14px}
+.bt{background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden}
+.bf{height:100%;border-radius:4px;transition:width .6s ease}
+.fl{font-size:11px;color:var(--muted);margin-top:6px}
+.fl span{color:#111}
+.ag{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
+.ac{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+.ac h3{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px}
+.ab{display:flex;gap:2px;height:20px;border-radius:5px;overflow:hidden;margin-bottom:8px}
+.al{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.al span{display:flex;align-items:center;gap:4px}
+.al .d{width:8px;height:8px;border-radius:2px}
+.st-tbl{background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px}
+.sr{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)}
+.sr:last-child{border-bottom:none}
+.sr .sy{color:var(--muted);font-size:12px;width:44px}
+.sr .sa{font-weight:600;width:100px}
+.sbt{flex:1;background:var(--bg);border-radius:3px;height:6px;overflow:hidden}
+.sbf{height:100%;background:var(--accent);border-radius:3px}
+.mc-c{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px}
+.mc-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.mc-n{font-weight:600;font-size:14px}
+.pb{font-size:13px;font-weight:700}
+.pt{background:#f0f0f0;border-radius:4px;height:10px;overflow:hidden;margin-bottom:12px}
+.pf{height:100%;border-radius:4px;transition:width .6s ease}
+.pc{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px}
+.pl{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.04em;margin-bottom:2px}
+.err{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 16px;color:var(--bad);font-size:13px;margin-bottom:16px}
+.chart-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:22px}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<aside class="sidebar">
+  <div class="logo"><div class="logo-dot"></div> finplan dev</div>
+
+  <div class="sec">Profile</div>
+  <div class="r2">
+    <div class="field"><label>Date of birth</label><input type="date" id="dob" value="1990-01-01"></div>
+    <div class="field"><label>Retirement age</label><input type="number" id="retirementAge" value="60" min="45" max="75"></div>
+  </div>
+  <div class="field"><label>Life expectancy</label><input type="number" id="lifeExpectancy" value="85" min="70" max="100"></div>
+
+  <div class="sec">Cash flow</div>
+  <div class="r2">
+    <div class="field"><label>Monthly income (&#x20B9;)</label><input type="number" id="monthlyIncome" value="150000" step="5000" oninput="updateSurplus()"></div>
+    <div class="field"><label>Monthly expenses (&#x20B9;)</label><input type="number" id="monthlyExpense" value="80000" step="5000" oninput="updateSurplus()"></div>
+  </div>
+  <div class="r2">
+    <div class="field"><label>Income growth %</label><input type="number" id="incomeGrowth" value="8" step="0.5"></div>
+    <div class="field"><label>Expense growth %</label><input type="number" id="expenseGrowth" value="6" step="0.5"></div>
+  </div>
+  <div id="surplusBox" class="surplus"></div>
+
+  <div class="sec">Portfolio</div>
+  <div class="field"><label>Total value (&#x20B9;)</label><input type="number" id="portfolioValue" value="2000000" step="100000"></div>
+  <div class="r2">
+    <div class="field"><label>Equity (&#x20B9;)</label><input type="number" id="equity" value="1200000" step="50000"></div>
+    <div class="field"><label>Debt (&#x20B9;)</label><input type="number" id="debt" value="500000" step="50000"></div>
+  </div>
+  <div class="field"><label>Liquid (&#x20B9;)</label><input type="number" id="liquid" value="300000" step="50000"></div>
+
+  <div class="sec">Goals</div>
+  <div id="goalsContainer"></div>
+  <button class="add-btn" onclick="addGoal()">+ Add goal</button>
+
+  <button class="run-btn" id="runBtn" onclick="runPlan()">Generate plan</button>
+  <button class="mc-btn"  id="mcBtn"  onclick="runMC()">Run Monte Carlo (300 runs)</button>
+</aside>
+
+<main class="main" id="main">
+  <div class="empty">
+    <div class="ei">&#x1F4CA;</div>
+    <p>Fill in the investor profile and<br>click <strong>Generate plan</strong></p>
+  </div>
+</main>
+</div>
+
+<script>
+// ── Goal state ────────────────────────────────────────────────────────────────
+let gid = 10;
+const goals = [
+  {id:gid++,name:"Home Purchase",   icon:"home",           target:8000000,date:"2030-01-01",isLoan:true, dp:20,tenure:20,rate:8.5},
+  {id:gid++,name:"Child Education", icon:"kids-education", target:3000000,date:"2035-01-01",isLoan:false,dp:0, tenure:0, rate:0  },
+];
+
+const ICONS = [
+  ["home","Home"],["kids-education","Education"],["marriage","Marriage"],
+  ["travel","Travel"],["car","Car"],["health","Health"],["other","Other"]
+];
+const ICONS_EMOJI = {home:"&#x1F3E1;","kids-education":"&#x1F393;",marriage:"&#x1F48D;",travel:"&#x2708;",car:"&#x1F697;",health:"&#x1F3E5;",default:"&#x1F3E6;",other:"&#x1F31F;"};
+
+function emojiFor(icon) { return ICONS_EMOJI[icon] || "&#x1F31F;"; }
+
+function renderGoals() {
+  const c = document.getElementById("goalsContainer");
+  c.innerHTML = "";
+  goals.forEach(function(g) {
+    const div = document.createElement("div");
+    div.className = "gc";
+    const loanExtra = g.isLoan
+      ? '<div class="r2 mt8"><div class="field"><label>Down payment %</label><input type="number" value="' + g.dp + '" min="0" max="100" onchange="updG(' + g.id + ',\'dp\',+this.value)"></div>'
+        + '<div class="field"><label>Rate %</label><input type="number" value="' + g.rate + '" step="0.25" onchange="updG(' + g.id + ',\'rate\',+this.value)"></div></div>'
+        + '<div class="field"><label>Tenure (yrs)</label><input type="number" value="' + g.tenure + '" onchange="updG(' + g.id + ',\'tenure\',+this.value)"></div>'
+      : "";
+    div.innerHTML = '<button class="rm" onclick="remG(' + g.id + ')">&#x00D7;</button>'
+      + '<div class="r2" style="margin-bottom:8px;">'
+      + '<select onchange="updG(' + g.id + ',\'icon\',this.value)">'
+      + ICONS.map(function(io){return '<option value="'+io[0]+'"'+(g.icon===io[0]?' selected':'')+'>'+io[1]+'</option>';}).join("")
+      + '</select>'
+      + '<input type="text" value="' + g.name + '" onchange="updG(' + g.id + ',\'name\',this.value)">'
+      + '</div>'
+      + '<div class="r2">'
+      + '<div class="field"><label>Amount (&#x20B9;)</label><input type="number" value="' + g.target + '" step="50000" onchange="updG(' + g.id + ',\'target\',+this.value)"></div>'
+      + '<div class="field"><label>Date</label><input type="date" value="' + g.date + '" onchange="updG(' + g.id + ',\'date\',this.value)"></div>'
+      + '</div>'
+      + '<div class="field"><label>Loan-backed?</label>'
+      + '<select onchange="updG(' + g.id + ',\'isLoan\',this.value===\'yes\')">'
+      + '<option value="no"'+(g.isLoan?'':' selected')+'>Self-funded</option>'
+      + '<option value="yes"'+(g.isLoan?' selected':'')+'>With loan</option>'
+      + '</select></div>'
+      + loanExtra;
+    c.appendChild(div);
+  });
+}
+
+function addGoal() { goals.push({id:gid++,name:"New goal",icon:"other",target:1000000,date:"2032-01-01",isLoan:false,dp:0,tenure:0,rate:0}); renderGoals(); }
+function remG(id)  { const i=goals.findIndex(function(g){return g.id===id;}); if(i>=0){goals.splice(i,1); renderGoals();} }
+function updG(id,k,v){ const g=goals.find(function(g){return g.id===id;}); if(g){g[k]=v; if(k==="isLoan")renderGoals();} }
+
+function updateSurplus() {
+  const inc = +document.getElementById("monthlyIncome").value;
+  const exp = +document.getElementById("monthlyExpense").value;
+  const s = inc - exp;
+  const box = document.getElementById("surplusBox");
+  box.style.background = s >= 0 ? "var(--accent2)" : "#fee2e2";
+  box.style.color       = s >= 0 ? "var(--accent)"  : "var(--bad)";
+  box.innerHTML = "<span>Monthly surplus</span><strong>" + fmt(s) + "/mo</strong>";
+}
+
+renderGoals();
+updateSurplus();
+
+// ── Payload builder ───────────────────────────────────────────────────────────
+function gv(id) { return document.getElementById(id).value; }
+
+function payload() {
+  const today = new Date().toISOString().slice(0,10);
+  return {
+    dob: gv("dob"),
+    retirementAge:  +gv("retirementAge"),
+    lifeExpectancy: +gv("lifeExpectancy"),
+    monthlyIncome:  +gv("monthlyIncome"),
+    monthlyExpense: +gv("monthlyExpense"),
+    incomeParams:  [{range:["2020-01-01","2200-01-01"],value:+gv("incomeGrowth")}],
+    expenseParams: [{range:["2020-01-01","2200-01-01"],value:+gv("expenseGrowth")}],
+    incomes:[], loans:[],
+    sips:[{id:1,name:"SIP",amount:10000,equity_percentage:0.7,debt_percentage:0.2,liquid_percentage:0.1}],
+    goals:[
+      {id:9001,name:"Retirement",    icon:"default",start_date:"R",end_date:"L",original_start_date:"R",original_end_date:"L",target_amount:0,is_loan:false,down_payment:0,loan_tenure:0,loan_interest_rate:0,priority:1},
+      {id:9002,name:"Emergency Fund",icon:"default",start_date:today,end_date:today,original_start_date:today,original_end_date:today,target_amount:+gv("monthlyExpense")*6,is_loan:false,down_payment:0,loan_tenure:0,loan_interest_rate:0,priority:1},
+    ].concat(goals.map(function(g){return{id:g.id,name:g.name,icon:g.icon,start_date:g.date,end_date:g.date,original_start_date:g.date,original_end_date:g.date,target_amount:g.target,is_loan:g.isLoan,down_payment:g.dp,loan_tenure:g.tenure,loan_interest_rate:g.rate,priority:2};})),
+    portfolioParams:[],
+    assetAllocation:[{years:3,equity:0.30,debt:0.50,liquid:0.20},{years:7,equity:0.60,debt:0.30,liquid:0.10},{years:100,equity:0.80,debt:0.15,liquid:0.05}],
+    retirementAssetAllocation:[{years:3,equity:0.20,debt:0.60,liquid:0.20},{years:7,equity:0.50,debt:0.40,liquid:0.10},{years:100,equity:0.70,debt:0.25,liquid:0.05}],
+    currentPortfolioValue: +gv("portfolioValue"),
+    portfolioBreakup:{Equity:{Amount:+gv("equity")},Debt:{Amount:+gv("debt")},Liquid:{Amount:+gv("liquid")}},
+    retirementBasedCashflows:[]
+  };
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function runPlan() {
+  setLoading("Generating plan...");
+  try {
+    const r = await fetch("/api/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload())});
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error);
+    renderPlan(j.data);
+  } catch(e) { renderErr(e.message); }
+}
+
+async function runMC() {
+  setLoading("Running 300 Monte Carlo simulations...");
+  try {
+    const r = await fetch("/api/monte-carlo?runs=300",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload())});
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error);
+    renderMC(j.data);
+  } catch(e) { renderErr(e.message); }
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────────
+function fmt(v) {
+  if(v===null||v===undefined)return"—";
+  const a=Math.abs(v);
+  if(a>=10000000) return "&#x20B9;"+(v/10000000).toFixed(2)+"Cr";
+  if(a>=100000)   return "&#x20B9;"+(v/100000).toFixed(2)+"L";
+  if(a>=1000)     return "&#x20B9;"+(v/1000).toFixed(1)+"K";
+  return "&#x20B9;"+Math.round(v).toLocaleString("en-IN");
+}
+function pct(a,b){return b>0?Math.min(100,Math.round(a/b*100)):0;}
+function tagCls(t){return{COMFORTABLE:"tC",MANAGEABLE:"tM",AT_RISK:"tA",UNAFFORDABLE:"tU"}[t]||"tU";}
+function tagLabel(t){return(t||"").replace("_"," ");}
+function tagColor(t){return{COMFORTABLE:"#1D9E75",MANAGEABLE:"#d97706",AT_RISK:"#ea580c",UNAFFORDABLE:"#b91c1c"}[t]||"#888";}
+
+// ── Render plan ───────────────────────────────────────────────────────────────
+function renderPlan(data) {
+  const gs = data.goals || [];
+  const surplus = +gv("monthlyIncome") - +gv("monthlyExpense");
+  const comfortable = gs.filter(function(g){return g.tag==="COMFORTABLE";}).length;
+  const needsAttention = gs.filter(function(g){return g.tag==="MANAGEABLE"||g.tag==="AT_RISK";}).length;
+  const bad = gs.filter(function(g){return g.tag==="UNAFFORDABLE";}).length;
+
+  let html = '<div class="rh">'
+    + '<h1>Financial Plan</h1>'
+    + '<p>Monthly surplus ' + fmt(surplus) + ' &nbsp;&middot;&nbsp; Retirement expense ' + fmt(data.retirementExpense) + '/mo</p>'
+    + '<div class="sg">'
+    + stat(gs.length,"Goals")
+    + stat(comfortable,"Comfortable","#7fffd4")
+    + stat(needsAttention,"Needs attention","#fde68a")
+    + stat(bad,"At risk","#fca5a5")
+    + '</div></div>';
+
+  html += '<div class="sh">Goal breakdown</div><div class="cg">';
+  gs.forEach(function(g){html+=goalCard(g);});
+  html += '</div>';
+
+  html += '<div class="sh">Asset allocation</div><div class="ag">';
+  html += allocCard("Ideal (engine output)", data.idealAssetAllocation);
+  html += allocCard("Current portfolio", data.currentAssetAllocation);
+  html += '</div>';
+
+  const sip = data.recommendedSipSchedule;
+  if(sip && sip.length) {
+    html += '<div class="sh">Recommended SIP schedule</div><div class="st-tbl">';
+    const max = Math.max.apply(null, sip.map(function(s){return s.amount;}));
+    sip.slice(0,10).forEach(function(s){
+      html += '<div class="sr">'
+        + '<span class="sy">'+s.year+'</span>'
+        + '<span class="sa">'+fmt(s.amount)+'/mo</span>'
+        + '<div class="sbt"><div class="sbf" style="width:'+pct(s.amount,max)+'%;"></div></div>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div class="sh">Portfolio projection</div>'
+    + '<div class="chart-wrap"><div style="position:relative;height:220px;"><canvas id="projChart"></canvas></div></div>';
+
+  document.getElementById("main").innerHTML = html;
+  drawProjectionChart(gs);
+}
+
+function stat(v, l, color) {
+  return '<div class="st"><div class="v"' + (color?' style="color:'+color+';"':'') + '>' + v + '</div><div class="l">' + l + '</div></div>';
+}
+
+function goalCard(g) {
+  const total = g.taxTotal || 0;
+  const color = tagColor(g.tag);
+  const funded = pct(g.projected_amount, total);
+  const att = g.attachments || {};
+  const lump = att.lumpsum ? att.lumpsum.amount : 0;
+  const sav  = att.savings  ? att.savings.amount  : 0;
+  return '<div class="gr">'
+    + '<div class="gh">'
+    + '<div><div class="gn">'+emojiFor(g.icon)+' '+g.name+'</div><div class="gd">'+(g.start_date||"")+'</div></div>'
+    + '<span class="tag '+tagCls(g.tag)+'">'+tagLabel(g.tag)+'</span>'
+    + '</div>'
+    + '<div class="nm">'
+    + '<div><div class="nl">Target</div><div class="nv">'+fmt(total)+'</div></div>'
+    + '<div><div class="nl">Projected</div><div class="nv" style="color:'+color+';">'+fmt(g.projected_amount)+'</div></div>'
+    + (g.shortfall_amount>0 ? '<div><div class="nl">Shortfall</div><div class="nv" style="color:#b91c1c;">'+fmt(g.shortfall_amount)+'</div></div>' : '<div></div>')
+    + '</div>'
+    + '<div class="bt"><div class="bf" style="width:'+funded+'%;background:'+color+';"></div></div>'
+    + '<div class="fl">'+funded+'% funded'
+    + (lump>0 ? ' &nbsp;&middot;&nbsp; Lumpsum <span>'+fmt(lump)+'</span>' : '')
+    + (sav>0  ? ' &nbsp;&middot;&nbsp; Savings <span>'+fmt(sav)+'</span>'  : '')
+    + '</div>'
+    + '</div>';
+}
+
+function allocCard(label, alloc) {
+  if(!alloc) return "";
+  const eq = Math.round((alloc.equity||0)*100);
+  const dt = Math.round((alloc.debt||0)*100);
+  const lq = Math.round((alloc.liquid||0)*100);
+  return '<div class="ac"><h3>'+label+'</h3>'
+    + '<div class="ab">'
+    + '<div style="flex:'+eq+';background:#1D9E75;"></div>'
+    + '<div style="flex:'+dt+';background:#378ADD;"></div>'
+    + '<div style="flex:'+lq+';background:#EF9F27;"></div>'
+    + '</div>'
+    + '<div class="al">'
+    + '<span><span class="d" style="background:#1D9E75;"></span>Equity '+eq+'%</span>'
+    + '<span><span class="d" style="background:#378ADD;"></span>Debt '+dt+'%</span>'
+    + '<span><span class="d" style="background:#EF9F27;"></span>Liquid '+lq+'%</span>'
+    + '</div></div>';
+}
+
+// ── Render Monte Carlo ────────────────────────────────────────────────────────
+function renderMC(data) {
+  const probs = data.goalProbabilities || [];
+  const det = data.deterministic || {};
+  const gs = det.goals || [];
+
+  const h80 = probs.filter(function(p){return p.successProbability>=0.8;}).length;
+  const h50 = probs.filter(function(p){return p.successProbability>=0.5&&p.successProbability<0.8;}).length;
+  const lo  = probs.filter(function(p){return p.successProbability<0.5;}).length;
+
+  let html = '<div class="rh">'
+    + '<h1>Monte Carlo Analysis</h1>'
+    + '<p>'+data.runs+' simulations &nbsp;&middot;&nbsp; Equity 12% &plusmn; 8% &nbsp;&middot;&nbsp; Debt 7% &plusmn; 2% &nbsp;&middot;&nbsp; Inflation 6% &plusmn; 2%</p>'
+    + '<div class="sg">'
+    + stat(data.runs,"Simulations")
+    + stat(h80,"Goals &ge;80%","#7fffd4")
+    + stat(h50,"Goals 50&ndash;80%","#fde68a")
+    + stat(lo,"Goals &lt;50%","#fca5a5")
+    + '</div></div>';
+
+  html += '<div class="sh">Goal success probability</div>';
+  probs.forEach(function(p){ html += mcCard(p); });
+
+  html += '<div class="sh">Base case (deterministic)</div><div class="cg">';
+  gs.forEach(function(g){ html += goalCard(g); });
+  html += '</div>';
+
+  document.getElementById("main").innerHTML = html;
+}
+
+function mcCard(p) {
+  const sp = p.successProbability || 0;
+  const pct100 = Math.round(sp*100);
+  const color = sp>=0.8?"#1D9E75":sp>=0.5?"#d97706":"#b91c1c";
+  return '<div class="mc-c">'
+    + '<div class="mc-h"><div class="mc-n">'+emojiFor(p.name)+' '+p.name+'</div><span class="pb" style="color:'+color+';">'+pct100+'% success</span></div>'
+    + '<div class="pt"><div class="pf" style="width:'+pct100+'%;background:'+color+';"></div></div>'
+    + '<div class="pc">'
+    + '<div><div class="pl">P10 pessimistic</div><div style="font-weight:600;">'+fmt(p.p10Projected)+'</div></div>'
+    + '<div><div class="pl">P50 median</div><div style="font-weight:600;">'+fmt(p.medianProjected)+'</div></div>'
+    + '<div><div class="pl">P90 optimistic</div><div style="font-weight:600;">'+fmt(p.p90Projected)+'</div></div>'
+    + '</div></div>';
+}
+
+// ── Portfolio projection chart ────────────────────────────────────────────────
+function drawProjectionChart(goals) {
+  const ctx = document.getElementById("projChart");
+  if(!ctx || !window.Chart) return;
+
+  // Build a rough cumulative projection curve from goal targets + savings
+  const currentYear = new Date().getFullYear();
+  const retAge = +gv("retirementAge");
+  const dob = new Date(gv("dob"));
+  const retYear = dob.getFullYear() + retAge;
+  const endYear = dob.getFullYear() + +gv("lifeExpectancy");
+  const portfolio = +gv("portfolioValue");
+  const surplus = +gv("monthlyIncome") - +gv("monthlyExpense");
+  const incGrowth = +gv("incomeGrowth")/100;
+
+  const labels = [], values = [];
+  let val = portfolio;
+  let ann = surplus * 12;
+  for(let y = currentYear; y <= endYear; y += 2) {
+    labels.push(y);
+    values.push(Math.round(val));
+    if(y < retYear) {
+      val = val * 1.095 + ann;
+      ann *= (1+incGrowth*0.7);
+    } else {
+      val = val * 1.04 - (+gv("monthlyExpense")*12*(1+((y-retYear)*0.06)));
+      if(val < 0) val = 0;
+    }
+  }
+
+  // Mark goal events
+  const annotations = [];
+  goals.forEach(function(g) {
+    const gy = new Date(g.start_date||"").getFullYear();
+    if(gy >= currentYear && gy <= endYear) {
+      annotations.push({ year: gy, label: g.name, color: tagColor(g.tag) });
+    }
+  });
+
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        borderColor: "#1D9E75",
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointRadius: labels.map(function(y){ return annotations.some(function(a){return a.year===y;})?6:0; }),
+        pointBackgroundColor: labels.map(function(y){
+          const a = annotations.find(function(a){return a.year===y;});
+          return a ? a.color : "transparent";
+        }),
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title:function(ctx){return "Year "+ctx[0].label;},
+          label:function(ctx){return fmt(ctx.raw);}
+        }}
+      },
+      scales:{
+        x:{ticks:{font:{size:11},color:"#888",maxTicksLimit:12}, grid:{color:"rgba(0,0,0,0.04)"}},
+        y:{ticks:{font:{size:11},color:"#888",callback:function(v){
+          if(v>=10000000)return "&#x20B9;"+(v/10000000).toFixed(0)+"Cr";
+          if(v>=100000)  return "&#x20B9;"+(v/100000).toFixed(0)+"L";
+          return "";
+        }}, grid:{color:"rgba(0,0,0,0.04)"}}
+      }
+    }
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setLoading(msg) {
+  document.getElementById("main").innerHTML = '<div class="loading"><div class="spinner"></div><span>'+msg+'</span></div>';
+}
+function renderErr(msg) {
+  document.getElementById("main").innerHTML = '<div class="err"><strong>Error:</strong> '+msg+'</div>';
+}
+</script>
+</body>
+</html>

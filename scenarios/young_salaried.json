@@ -1,0 +1,63 @@
+{
+  "dob": "1990-01-01",
+  "retirementAge": 60,
+  "lifeExpectancy": 85,
+  "monthlyIncome": 150000,
+  "monthlyExpense": 80000,
+  "incomeParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 8 }],
+  "expenseParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 6 }],
+  "incomes": [],
+  "loans": [],
+  "sips": [
+    { "id": 1, "name": "Equity SIP", "amount": 10000,
+      "equity_percentage": 0.7, "debt_percentage": 0.2, "liquid_percentage": 0.1 }
+  ],
+  "goals": [
+    {
+      "id": 9001, "name": "Retirement", "icon": "default",
+      "start_date": "R", "end_date": "L",
+      "original_start_date": "R", "original_end_date": "L",
+      "target_amount": 0, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
+    },
+    {
+      "id": 9002, "name": "Emergency Fund", "icon": "default",
+      "start_date": "2026-04-01", "end_date": "2026-04-01",
+      "original_start_date": "2026-04-01", "original_end_date": "2026-04-01",
+      "target_amount": 480000, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
+    },
+    {
+      "id": 1, "name": "Home Purchase", "icon": "home",
+      "start_date": "2030-01-01", "end_date": "2030-01-01",
+      "original_start_date": "2030-01-01", "original_end_date": "2030-01-01",
+      "target_amount": 8000000, "is_loan": true,
+      "down_payment": 20, "loan_tenure": 20, "loan_interest_rate": 8.5, "priority": 2
+    },
+    {
+      "id": 2, "name": "Child Education", "icon": "kids-education",
+      "start_date": "2035-01-01", "end_date": "2035-01-01",
+      "original_start_date": "2035-01-01", "original_end_date": "2035-01-01",
+      "target_amount": 3000000, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 2
+    }
+  ],
+  "portfolioParams": [],
+  "assetAllocation": [
+    { "years": 3,   "equity": 0.30, "debt": 0.50, "liquid": 0.20 },
+    { "years": 7,   "equity": 0.60, "debt": 0.30, "liquid": 0.10 },
+    { "years": 100, "equity": 0.80, "debt": 0.15, "liquid": 0.05 }
+  ],
+  "retirementAssetAllocation": [
+    { "years": 3,   "equity": 0.20, "debt": 0.60, "liquid": 0.20 },
+    { "years": 7,   "equity": 0.50, "debt": 0.40, "liquid": 0.10 },
+    { "years": 100, "equity": 0.70, "debt": 0.25, "liquid": 0.05 }
+  ],
+  "currentPortfolioValue": 2000000,
+  "portfolioBreakup": {
+    "Equity": { "Amount": 1200000 },
+    "Debt":   { "Amount": 500000  },
+    "Liquid": { "Amount": 300000  }
+  },
+  "retirementBasedCashflows": []
+}

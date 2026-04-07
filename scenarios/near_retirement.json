@@ -1,0 +1,59 @@
+{
+  "dob": "1970-01-01",
+  "retirementAge": 58,
+  "lifeExpectancy": 85,
+  "monthlyIncome": 300000,
+  "monthlyExpense": 150000,
+  "incomeParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 5 }],
+  "expenseParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 6 }],
+  "incomes": [],
+  "loans": [],
+  "sips": [
+    { "id": 1, "name": "Balanced SIP", "amount": 50000,
+      "equity_percentage": 0.5, "debt_percentage": 0.4, "liquid_percentage": 0.1 }
+  ],
+  "goals": [
+    {
+      "id": 9001, "name": "Retirement", "icon": "default",
+      "start_date": "R", "end_date": "L",
+      "original_start_date": "R", "original_end_date": "L",
+      "target_amount": 0, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
+    },
+    {
+      "id": 9002, "name": "Emergency Fund", "icon": "default",
+      "start_date": "2026-04-01", "end_date": "2026-04-01",
+      "original_start_date": "2026-04-01", "original_end_date": "2026-04-01",
+      "target_amount": 900000, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
+    },
+    {
+      "id": 2, "name": "Child Education", "icon": "kids-education",
+      "start_date": "2028-01-01", "end_date": "2028-01-01",
+      "original_start_date": "2028-01-01", "original_end_date": "2028-01-01",
+      "target_amount": 5000000, "is_loan": false,
+      "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 2
+    }
+  ],
+  "portfolioParams": [],
+  "assetAllocation": [
+    { "years": 3,   "equity": 0.20, "debt": 0.60, "liquid": 0.20 },
+    { "years": 7,   "equity": 0.40, "debt": 0.45, "liquid": 0.15 },
+    { "years": 100, "equity": 0.60, "debt": 0.30, "liquid": 0.10 }
+  ],
+  "retirementAssetAllocation": [
+    { "years": 3,   "equity": 0.10, "debt": 0.70, "liquid": 0.20 },
+    { "years": 7,   "equity": 0.30, "debt": 0.55, "liquid": 0.15 },
+    { "years": 100, "equity": 0.50, "debt": 0.40, "liquid": 0.10 }
+  ],
+  "currentPortfolioValue": 15000000,
+  "portfolioBreakup": {
+    "Equity": { "Amount": 8000000  },
+    "Debt":   { "Amount": 5000000  },
+    "Liquid": { "Amount": 2000000  }
+  },
+  "retirementBasedCashflows": [
+    { "id": 301, "asset_type": "EPF", "market_value": 3000000, "epf_last_contribution": 120000 },
+    { "id": 302, "asset_type": "PPF", "market_value": 2000000, "epf_last_contribution": 0 }
+  ]
+}
