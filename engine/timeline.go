@@ -18,6 +18,7 @@ import (
 //  9.  Two-pass lumpsum optimisation (exact savings simulation)
 //  10. FinancialSolution (core waterfall, retirement-first lumpsum)
 //  11. Ideal asset allocation calculation
+//  12. Minimum retirement SIP (computeRetirementSIP)
 func RunPlan(p PlanParams) PlanResult {
 	// ── Deep-copy mutable slices ──────────────────────────────────────────
 	goals := make([]Goal, len(p.Goals))
@@ -209,7 +210,7 @@ func RunPlan(p PlanParams) PlanResult {
 	// that the remainder is preserved for retirement.  The exact savings
 	// simulation (simulateSavingsCoverage) mirrors the FinancialSolution
 	// inner loop, so Pass 1 is free of approximation errors.
-	lumpsumPerGoal, _ := twoPassLumpsumAllocation(
+	lumpsumPerGoal, retirementReserved := twoPassLumpsumAllocation(
 		goals,
 		goalsAllocation,
 		p.CurrentPortfolioValue,
@@ -333,11 +334,71 @@ func RunPlan(p PlanParams) PlanResult {
 		return sipSchedule[i].Year < sipSchedule[j].Year
 	})
 
+	// ── 12. Compute minimum retirement SIP ───────────────────────────────
+	// Find the retirement goal corpus from the waterfall result.
+	retGoalID := -1
+	for _, g := range goals {
+		if g.Name == GoalRetirement && g.Icon == "default" {
+			retGoalID = g.ID
+			break
+		}
+	}
+	retirementCorpus := 0.0
+	if retGoalID >= 0 {
+		for _, gr := range goalResults {
+			if gr.ID == retGoalID {
+				retirementCorpus = gr.TaxTotal
+				break
+			}
+		}
+	}
+
+	// Sum PPF + EPF maturity principal and accrued interest at retirement.
+	// These are the ring-fenced cashflows added in step 1.
+	ppfEPFAtRetirement := 0.0
+	for _, pp := range portfolioParams {
+		if pp.AssetType == "PPF" || pp.AssetType == "EPF" {
+			ppfEPFAtRetirement += pp.MaturityAmount
+			for _, interest := range pp.Interests {
+				ppfEPFAtRetirement += interest.Amount
+			}
+		}
+	}
+
+	// FV multiplier and blended growth rate for the retirement allocation.
+	retLumpsumFV := 1.0
+	retGrowthRate := 0.0
+	if retGoalID >= 0 {
+		if alloc, ok := goalsAllocation[retGoalID]; ok {
+			if ya, ok2 := alloc[today.Year()]; ok2 {
+				retLumpsumFV = ya.FV
+				retGrowthRate = ya.Growth
+			}
+		}
+	}
+
+	// Months from today to retirement (clamped to zero if already retired).
+	monthsToRetirement := 0
+	if retirementDate.After(today) {
+		d := retirementDate.Sub(today)
+		monthsToRetirement = int(d.Hours() / 24 / 30.4375)
+	}
+
+	retirementSIP := ComputeRetirementSIP(
+		retirementCorpus,
+		retirementReserved,
+		retLumpsumFV,
+		ppfEPFAtRetirement,
+		monthsToRetirement,
+		retGrowthRate,
+	)
+
 	return PlanResult{
 		Goals:                  goalResults,
 		IdealAssetAllocation:   idealAlloc,
 		CurrentAssetAllocation: currentAlloc,
 		RecommendedSIPSchedule: sipSchedule,
 		RetirementExpense:      retirementExpense,
+		RetirementSIP:          retirementSIP,
 	}
 }

@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"testing"
 
@@ -183,6 +184,54 @@ func TestRetirementCorpusDiscountRate(t *testing.T) {
 				t.Errorf("corpus %.0f < floor %.0f: corpus loop may be broken", g.TaxTotal, minimumFloor)
 			}
 		}
+	}
+}
+
+// ── computeRetirementSIP unit tests ──────────────────────────────────────────
+
+func TestComputeRetirementSIP_AlreadyCovered(t *testing.T) {
+	// lumpsum FV = 50L × 2.5 = 1.25 Cr, PPF/EPF = 60L → total 1.85 Cr > 1 Cr corpus
+	sip := engine.ComputeRetirementSIP(1_00_00_000, 50_00_000, 2.5, 60_00_000, 240, 10)
+	if sip != 0 {
+		t.Errorf("expected 0 when corpus is covered, got %.0f", sip)
+	}
+}
+
+func TestComputeRetirementSIP_AlreadyRetired(t *testing.T) {
+	sip := engine.ComputeRetirementSIP(5_00_00_000, 0, 1, 0, 0, 10)
+	if sip != 0 {
+		t.Errorf("expected 0 when monthsToRetirement=0, got %.0f", sip)
+	}
+}
+
+func TestComputeRetirementSIP_ZeroRate(t *testing.T) {
+	// At 0% growth the SIP is simply remaining / months.
+	corpus := 12_00_000.0
+	sip := engine.ComputeRetirementSIP(corpus, 0, 1, 0, 120, 0)
+	want := math.Ceil(corpus / 120)
+	if sip != want {
+		t.Errorf("0%% rate: got %.0f want %.0f", sip, want)
+	}
+}
+
+func TestComputeRetirementSIP_ReasonableMagnitude(t *testing.T) {
+	// 5 Cr corpus, no lumpsum, no PPF/EPF, 20 years, 10% p.a. growth.
+	sip := engine.ComputeRetirementSIP(5_00_00_000, 0, 1, 0, 240, 10)
+	t.Logf("RetirementSIP for 5Cr over 20 yrs at 10%% pa: ₹%.0f/month", sip)
+	if sip <= 0 {
+		t.Error("expected positive SIP")
+	}
+	if sip > 1_00_000 {
+		t.Errorf("SIP %.0f seems too high for 5Cr over 20 yrs at 10%%", sip)
+	}
+}
+
+func TestRunPlanRetirementSIPPresent(t *testing.T) {
+	p := loadScenario(t, "../scenarios/young_salaried.json")
+	result := engine.RunPlan(p)
+	t.Logf("RetirementSIP: ₹%.0f/month", result.RetirementSIP)
+	if result.RetirementSIP < 0 {
+		t.Error("RetirementSIP should not be negative")
 	}
 }
 

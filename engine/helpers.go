@@ -227,3 +227,47 @@ func yearsUntil(goalDate time.Time) float64 {
 	today := todayFirstOfMonth()
 	return goalDate.Sub(today).Hours() / 24 / 365.25
 }
+
+// computeRetirementSIP returns the minimum monthly SIP required to fund
+// the retirement corpus, net of two already-committed sources:
+//
+//  1. The portfolio lumpsum ring-fenced for retirement (grown by lumpsumFV
+//     to its future value at retirement).
+//  2. The combined PPF + EPF maturity value (principal + accrued interest)
+//     at the retirement date.
+//
+// It uses the standard annuity-due formula solved for the periodic payment:
+//
+//	FV = PMT × (1+r) × [(1+r)^n − 1] / r
+//	PMT = FV × r / [(1+r) × ((1+r)^n − 1)]
+//
+// where r = annualGrowthRate/1200 (monthly rate) and n = monthsToRetirement.
+// Returns 0 if the corpus is already fully covered or if retirement is now.
+func ComputeRetirementSIP(
+	retirementCorpus float64,
+	retirementLumpsum float64,
+	lumpsumFV float64,
+	ppfEPFAtRetirement float64,
+	monthsToRetirement int,
+	annualGrowthRate float64,
+) float64 {
+	if monthsToRetirement <= 0 {
+		return 0
+	}
+	remaining := retirementCorpus - retirementLumpsum*lumpsumFV - ppfEPFAtRetirement
+	if remaining <= 0 {
+		return 0
+	}
+	r := annualGrowthRate / 1200
+	n := float64(monthsToRetirement)
+	if r == 0 {
+		return math.Ceil(remaining / n)
+	}
+	p := math.Pow(1+r, n)
+	// annuity-due: PMT = FV × r / [(1+r) × (p − 1)]
+	sip := remaining * r / ((1 + r) * (p - 1))
+	if sip < 0 {
+		return 0
+	}
+	return math.Ceil(sip)
+}

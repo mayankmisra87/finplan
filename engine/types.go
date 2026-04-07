@@ -204,6 +204,7 @@ type PlanResult struct {
 	CurrentAssetAllocation AllocationSplit `json:"currentAssetAllocation"`
 	RecommendedSIPSchedule []SIPSchedule  `json:"recommendedSipSchedule"`
 	RetirementExpense      float64         `json:"retirementExpense"`
+	RetirementSIP          float64         `json:"retirementSip"` // minimum monthly SIP to fund the retirement corpus
 	IsFlatLine             bool            `json:"isFlatLine"`   // true only if portfolio genuinely hits zero
 	FlatLineDate           string          `json:"flatLineDate"` // date portfolio was exhausted
 }
