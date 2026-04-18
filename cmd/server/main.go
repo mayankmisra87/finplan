@@ -20,6 +20,7 @@ func main() {
 	mux.HandleFunc("/api/plan",             withCORS(handlePlan))
 	mux.HandleFunc("/api/monte-carlo",      withCORS(handleMonteCarlo))
 	mux.HandleFunc("/api/projection",       withCORS(handleProjection))
+	mux.HandleFunc("/api/cashflow",         withCORS(handleCashflow))
 	mux.HandleFunc("/api/default-scenario", withCORS(handleDefaultScenario))
 	mux.Handle("/", http.FileServer(http.Dir(*staticDir)))
 
@@ -87,6 +88,21 @@ func handleProjection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := engine.RunProjection(params)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func handleCashflow(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var params engine.PlanParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	result := engine.RunCashflow(params)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }

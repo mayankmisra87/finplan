@@ -92,11 +92,16 @@
 
         <!-- Cash Flow panel -->
         <div class="tab-panel hidden p-5" data-panel="cashflow">
-          <div class="chart-container" style="height:480px">
-            <div id="cf-chart" style="height:100%"></div>
+          <div class="flex items-center gap-3 mb-4 flex-wrap">
+            <span class="text-xs text-gray-400 shrink-0">Year</span>
+            <input type="range" id="cf-year-slider" min="2026" max="2078" step="1"
+              class="flex-1 min-w-40 h-1.5 rounded-full appearance-none cursor-pointer accent-indigo-500 bg-[#3b3b52]">
+            <span id="cf-year-label" class="text-indigo-300 font-bold font-mono w-14 text-right text-sm">—</span>
+            <span id="cf-year-status" class="text-xs text-gray-500 w-64 truncate"></span>
           </div>
+          <div id="cf-chart" style="height:440px"></div>
           <p class="text-xs text-gray-500 mt-2">
-            Annual income vs total outflows (expenses + EMIs + SIPs). Surplus line shows investable savings.
+            Drag the slider to explore household cash flows year by year. Pre-retirement shows income allocation across expenses and investments; post-retirement shows how expenses are funded from portfolio drawdown and NPS annuity.
           </p>
         </div>
 

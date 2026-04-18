@@ -4,6 +4,7 @@
 let currentScenario  = null;
 let currentResult    = null;
 let projectionResult = null;
+let cashflowResult   = null;
 let mcResult         = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -54,8 +55,9 @@ document.getElementById('run-btn').addEventListener('click', async () => {
     showError('Invalid JSON in scenario editor');
     return;
   }
-  mcResult = null;
+  mcResult         = null;
   projectionResult = null;
+  cashflowResult   = null;
   setLoading(true);
   try {
     await runPlan();
@@ -66,14 +68,17 @@ document.getElementById('run-btn').addEventListener('click', async () => {
 
 async function runPlan() {
   const body = JSON.stringify(currentScenario);
-  const [planRes, projRes] = await Promise.all([
+  const [planRes, projRes, cfRes] = await Promise.all([
     fetch('/api/plan',       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }),
     fetch('/api/projection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }),
+    fetch('/api/cashflow',   { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }),
   ]);
   if (!planRes.ok) throw new Error(await planRes.text());
   if (!projRes.ok) throw new Error(await projRes.text());
+  if (!cfRes.ok)   throw new Error(await cfRes.text());
   currentResult    = await planRes.json();
   projectionResult = await projRes.json();
+  cashflowResult   = await cfRes.json();
   renderAll();
 }
 
@@ -220,66 +225,136 @@ function renderNetWorth() {
   }, { responsive: true, displayModeBar: false });
 }
 
-// ── Cash Flow tab (income vs expense waterfall) ────────────────────────────────
+// ── Cash Flow tab — engine-backed Sankey with year slider ─────────────────────
 function renderCashFlow() {
-  const s = currentScenario;
-  if (!s) return;
+  if (!cashflowResult) return;
+  const yrs    = cashflowResult.years;
+  if (!yrs.length) return;
 
-  const today            = new Date();
-  const startYear        = today.getFullYear();
-  const primaryRetireYear = (new Date(s.dob).getFullYear()) + s.retirementAge;
-  const spouseRetireYear  = s.spouse
-    ? (new Date(s.spouse.dob).getFullYear()) + s.spouse.retirementAge
-    : null;
-  const lastRetireYear = Math.max(primaryRetireYear, spouseRetireYear || primaryRetireYear);
-  const endYear = lastRetireYear + 3;
+  const slider = document.getElementById('cf-year-slider');
+  const startY = yrs[0].year;
+  const endY   = yrs[yrs.length - 1].year;
+  slider.min   = startY;
+  slider.max   = endY;
+  if (+slider.value < startY || +slider.value > endY) slider.value = startY;
 
-  const years = [], incomes = [], exps = [], surplus = [];
+  slider.oninput = () => renderSankeyYear(+slider.value);
+  renderSankeyYear(+slider.value);
+}
 
-  let primInc   = s.monthlyIncome * 12;
-  let spouseInc = (s.spouse?.monthlyIncome || 0) * 12;
-  let exp       = s.monthlyExpense * 12;
+function renderSankeyYear(year) {
+  const cfMap = {};
+  cashflowResult.years.forEach(y => { cfMap[y.year] = y; });
+  const cf = cfMap[year];
+  if (!cf) return;
 
-  const primGrowth   = (s.incomeParams?.[0]?.value        || 8) / 100;
-  const spouseGrowth = (s.spouse?.incomeParams?.[0]?.value || 8) / 100;
-  const expGrowth    = (s.expenseParams?.[0]?.value        || 6) / 100;
-  const totalLoan    = (s.loans || []).reduce((a, l) => a + (l.emi || 0), 0) * 12;
-  const totalSIP     = (s.sips  || []).reduce((a, b) => a + b.amount,     0) * 12;
+  document.getElementById('cf-year-label').textContent = year;
 
-  for (let y = startYear; y <= endYear; y++) {
-    const activePrim   = y < primaryRetireYear;
-    const activeSpouse = spouseRetireYear ? y < spouseRetireYear : false;
-    const activeIncome = (activePrim ? primInc : 0) + (activeSpouse ? spouseInc : 0);
-    const anyWorking   = activePrim || activeSpouse;
+  const primaryRetired = year >= cashflowResult.primaryRetireYear;
+  const spouseRetired  = cashflowResult.spouseRetireYear
+    ? year >= cashflowResult.spouseRetireYear : true;
+  let status = '';
+  if (primaryRetired && spouseRetired)
+    status = 'Both retired — portfolio drawdown phase';
+  else if (primaryRetired)
+    status = 'Primary earner retired';
+  else if (spouseRetired && cashflowResult.spouseRetireYear)
+    status = 'Spouse retired';
+  document.getElementById('cf-year-status').textContent = status;
 
-    years.push(y);
-    incomes.push(activeIncome / 1e5);
-    const totalExp = anyWorking ? exp + totalLoan + totalSIP : exp;
-    exps.push(totalExp / 1e5);
-    surplus.push(anyWorking
-      ? Math.max(0, activeIncome - totalExp) / 1e5
-      : -(exp / 1e5));
+  const { nodeLabels, nodeColors, sources, targets, values, linkColors } =
+    buildSankeyData(cf);
 
-    if (activePrim)   primInc   *= (1 + primGrowth);
-    if (activeSpouse) spouseInc *= (1 + spouseGrowth);
-    exp *= (1 + expGrowth);
+  Plotly.react('cf-chart', [{
+    type: 'sankey',
+    orientation: 'h',
+    arrangement: 'snap',
+    node: {
+      pad: 18, thickness: 22,
+      line: { color: '#1a1a2e', width: 0.5 },
+      label: nodeLabels,
+      color: nodeColors,
+    },
+    link: {
+      source: sources,
+      target: targets,
+      value:  values,
+      color:  linkColors,
+      customdata: values.map(v => fmtCr(v)),
+      hovertemplate: '%{source.label} → %{target.label}<br>%{customdata}<extra></extra>',
+    },
+  }], {
+    paper_bgcolor: 'transparent',
+    font: { color: '#e2e2f0', size: 12 },
+    margin: { t: 10, r: 30, b: 10, l: 30 },
+  }, { responsive: true, displayModeBar: false });
+}
+
+function buildSankeyData(cf) {
+  const nodeLabels = [], nodeColors = [];
+  const sources = [], targets = [], values = [], linkColors = [];
+
+  function addNode(label, color) {
+    nodeLabels.push(label);
+    nodeColors.push(color);
+    return nodeLabels.length - 1;
   }
 
-  Plotly.newPlot('cf-chart', [
-    { x: years, y: incomes, name: 'Income',   type: 'bar', marker: { color: '#4ade80' } },
-    { x: years, y: exps,    name: 'Expenses + EMI + SIP', type: 'bar', marker: { color: '#f87171' } },
-    { x: years, y: surplus, name: 'Surplus',  type: 'scatter', mode: 'lines+markers',
-      line: { color: '#818cf8', width: 2 }, marker: { size: 4 } },
-  ], {
-    barmode: 'group',
-    paper_bgcolor: 'transparent',
-    plot_bgcolor:  'transparent',
-    font: { color: '#e2e2f0', size: 11 },
-    xaxis: { gridcolor: '#3b3b52', title: 'Year' },
-    yaxis: { gridcolor: '#3b3b52', title: 'Annual (₹ Lakh)' },
-    legend: { bgcolor: 'transparent' },
-    margin: { t: 20, r: 20, b: 50, l: 60 },
-  }, { responsive: true, displayModeBar: false });
+  function addLink(src, tgt, val, col) {
+    if (src < 0 || tgt < 0 || val < 500) return;
+    sources.push(src); targets.push(tgt);
+    values.push(Math.round(val));
+    linkColors.push(col);
+  }
+
+  const totalIncome = cf.primaryIncome + cf.spouseIncome;
+
+  if (totalIncome > 0) {
+    // ── Pre-retirement: income → expenses + investments ───────────────────────
+    const investTotal = cf.toEquity + cf.toDebt + cf.toLiquid;
+    const totalSinks  = cf.expenses + cf.loanEMIs + cf.goalCosts + investTotal;
+    const deficit     = Math.max(0, totalSinks - totalIncome);
+
+    const primIdx   = cf.primaryIncome > 0 ? addNode('Primary Income', '#22c55e') : -1;
+    const spouseIdx = cf.spouseIncome  > 0 ? addNode('Spouse Income',  '#86efac') : -1;
+    const drawIdx   = deficit > 500     ? addNode('Portfolio Draw', '#f43f5e') : -1;
+
+    const expIdx  =                       addNode('Living Expenses', '#ef4444');
+    const emiIdx  = cf.loanEMIs  > 500 ? addNode('Loan EMIs',       '#f97316') : -1;
+    const goalIdx = cf.goalCosts > 500 ? addNode('Goal Costs',      '#eab308') : -1;
+    const eqIdx   = cf.toEquity  > 500 ? addNode('→ Equity',        '#6366f1') : -1;
+    const dbIdx   = cf.toDebt    > 500 ? addNode('→ Debt',          '#22d3ee') : -1;
+    const lqIdx   = cf.toLiquid  > 500 ? addNode('→ Liquid',        '#34d399') : -1;
+
+    // Each sink is split proportionally across income sources (and portfolio draw if deficit)
+    const primShare   = totalSinks > 0 ? cf.primaryIncome / totalSinks : 0;
+    const spouseShare = totalSinks > 0 ? cf.spouseIncome  / totalSinks : 0;
+    const drawShare   = totalSinks > 0 ? deficit          / totalSinks : 0;
+
+    const sinkDefs = [
+      { idx: expIdx,  val: cf.expenses,  col: 'rgba(239,68,68,0.25)'  },
+      { idx: emiIdx,  val: cf.loanEMIs,  col: 'rgba(249,115,22,0.25)' },
+      { idx: goalIdx, val: cf.goalCosts, col: 'rgba(234,179,8,0.25)'  },
+      { idx: eqIdx,   val: cf.toEquity,  col: 'rgba(99,102,241,0.3)'  },
+      { idx: dbIdx,   val: cf.toDebt,    col: 'rgba(34,211,238,0.3)'  },
+      { idx: lqIdx,   val: cf.toLiquid,  col: 'rgba(52,211,153,0.3)'  },
+    ].filter(s => s.idx >= 0 && s.val > 500);
+
+    for (const s of sinkDefs) {
+      addLink(primIdx,   s.idx, s.val * primShare,   s.col);
+      addLink(spouseIdx, s.idx, s.val * spouseShare, s.col);
+      addLink(drawIdx,   s.idx, s.val * drawShare,   'rgba(244,63,94,0.25)');
+    }
+  } else {
+    // ── Post-retirement: portfolio + annuity → expenses ───────────────────────
+    const drawIdx  = addNode('Portfolio Drawdown', '#f43f5e');
+    const annuIdx  = cf.npsAnnuity > 500 ? addNode('NPS Annuity', '#a78bfa') : -1;
+    const expIdx   = addNode('Living Expenses',    '#ef4444');
+    addLink(drawIdx, expIdx, cf.drawdown,   'rgba(244,63,94,0.3)');
+    addLink(annuIdx, expIdx, cf.npsAnnuity, 'rgba(167,139,250,0.3)');
+  }
+
+  return { nodeLabels, nodeColors, sources, targets, values, linkColors };
 }
 
 // ── Monte Carlo tab ───────────────────────────────────────────────────────────
