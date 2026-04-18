@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinPlan — Financial Planning</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" defer></script>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="h-full flex flex-col">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between px-6 py-3 border-b border-[#3b3b52] shrink-0">
+    <div class="flex items-center gap-2">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <span class="font-bold text-indigo-300 tracking-wide text-lg">FinPlan</span>
+    </div>
+    <div class="text-xs text-gray-500">Financial Planning Engine</div>
+  </header>
+
+  <!-- Error banner -->
+  <div id="error-banner" class="hidden bg-red-900 border border-red-700 text-red-200 text-sm px-4 py-2 text-center"></div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+    <div class="flex flex-col items-center gap-3">
+      <div class="spinner"></div>
+      <span class="text-gray-300 text-sm">Running plan…</span>
+    </div>
+  </div>
+
+  <!-- Main layout -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Sidebar: scenario editor -->
+    <aside class="w-80 shrink-0 border-r border-[#3b3b52] flex flex-col p-4 gap-3 overflow-y-auto">
+      <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Scenario JSON</div>
+      <textarea
+        id="scenario-json"
+        class="flex-1 bg-[#1a1a2e] border border-[#3b3b52] rounded-lg text-xs font-mono text-gray-200 p-3 resize-none focus:outline-none focus:border-indigo-500 min-h-[400px]"
+        spellcheck="false"
+      ></textarea>
+      <button
+        id="run-btn"
+        class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+      >
+        Run Plan
+      </button>
+      <div class="text-xs text-gray-600">Edit JSON above and click Run Plan to recompute.</div>
+    </aside>
+
+    <!-- Right panel -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+
+      <!-- Summary bar -->
+      <div id="summary-bar" class="flex gap-3 px-5 py-3 border-b border-[#3b3b52] shrink-0 overflow-x-auto"></div>
+
+      <!-- Tabs -->
+      <div class="flex border-b border-[#3b3b52] px-4 shrink-0">
+        <button class="tab-btn active" data-tab="goals">Goals</button>
+        <button class="tab-btn" data-tab="networth">Net Worth</button>
+        <button class="tab-btn" data-tab="cashflow">Cash Flow</button>
+        <button class="tab-btn" data-tab="montecarlo">Monte Carlo</button>
+      </div>
+
+      <!-- Tab panels -->
+      <div class="flex-1 overflow-y-auto">
+
+        <!-- Goals panel -->
+        <div class="tab-panel p-5" data-panel="goals">
+          <div id="goal-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6"></div>
+
+          <div class="mt-6">
+            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Recommended SIP Schedule</div>
+            <div id="sip-schedule" class="bg-[#1e1e2e] border border-[#3b3b52] rounded-lg overflow-hidden"></div>
+          </div>
+        </div>
+
+        <!-- Net Worth panel -->
+        <div class="tab-panel hidden p-5" data-panel="networth">
+          <div class="chart-container" style="height:480px">
+            <div id="nw-chart" style="height:100%"></div>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">
+            Indicative projection only — uses simplified annual growth rates, not the full engine waterfall.
+            The orange dashed line marks retirement.
+          </p>
+        </div>
+
+        <!-- Cash Flow panel -->
+        <div class="tab-panel hidden p-5" data-panel="cashflow">
+          <div class="chart-container" style="height:480px">
+            <div id="cf-chart" style="height:100%"></div>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">
+            Annual income vs total outflows (expenses + EMIs + SIPs). Surplus line shows investable savings.
+          </p>
+        </div>
+
+        <!-- Monte Carlo panel -->
+        <div class="tab-panel hidden p-5" data-panel="montecarlo">
+          <div id="mc-loading" class="hidden flex items-center gap-3 mb-4">
+            <div class="spinner" style="width:24px;height:24px;border-width:2px"></div>
+            <span class="text-sm text-gray-400">Running 300 simulations…</span>
+          </div>
+
+          <div id="mc-content">
+            <div class="text-xs text-gray-500 mb-4" id="mc-runs"></div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <!-- Probability bars -->
+              <div>
+                <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Goal Success Probability</div>
+                <div id="mc-probs"></div>
+              </div>
+
+              <!-- P10/P50/P90 chart -->
+              <div>
+                <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">P10 / P50 / P90 Projected Corpus</div>
+                <div class="chart-container" style="height:300px">
+                  <div id="mc-chart" style="height:100%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tab panels -->
+    </div><!-- /right panel -->
+  </div><!-- /main layout -->
+
+  <script src="/app.js"></script>
+</body>
+</html>
