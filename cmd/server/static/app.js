@@ -1,9 +1,10 @@
 'use strict';
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let currentScenario = null;
-let currentResult   = null;
-let mcResult        = null;
+let currentScenario  = null;
+let currentResult    = null;
+let projectionResult = null;
+let mcResult         = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -54,6 +55,7 @@ document.getElementById('run-btn').addEventListener('click', async () => {
     return;
   }
   mcResult = null;
+  projectionResult = null;
   setLoading(true);
   try {
     await runPlan();
@@ -63,13 +65,15 @@ document.getElementById('run-btn').addEventListener('click', async () => {
 });
 
 async function runPlan() {
-  const res = await fetch('/api/plan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(currentScenario),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  currentResult = await res.json();
+  const body = JSON.stringify(currentScenario);
+  const [planRes, projRes] = await Promise.all([
+    fetch('/api/plan',       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }),
+    fetch('/api/projection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }),
+  ]);
+  if (!planRes.ok) throw new Error(await planRes.text());
+  if (!projRes.ok) throw new Error(await projRes.text());
+  currentResult    = await planRes.json();
+  projectionResult = await projRes.json();
   renderAll();
 }
 
@@ -165,75 +169,28 @@ function renderGoals() {
   }
 }
 
-// ── Net Worth tab (stacked bar chart) ─────────────────────────────────────────
+// ── Net Worth tab — engine-backed projection ───────────────────────────────────
 function renderNetWorth() {
-  const s = currentScenario;
-  if (!s) return;
+  if (!projectionResult) return;
 
-  const today      = new Date();
-  const startYear  = today.getFullYear();
-  const primaryRetireYear = (new Date(s.dob).getFullYear()) + s.retirementAge;
-  const spouseRetireYear  = s.spouse
-    ? (new Date(s.spouse.dob).getFullYear()) + s.spouse.retirementAge
-    : null;
-  // Use the longer-lived person's life expectancy end year
-  const endYear = (new Date(s.dob).getFullYear()) + s.lifeExpectancy;
+  const snaps = projectionResult.snapshots;
+  const primaryRetireYear = projectionResult.primaryRetireYear;
+  const spouseRetireYear  = projectionResult.spouseRetireYear || null;
 
-  const years  = [], equity = [], debt = [], liquid = [];
+  const years  = snaps.map(s => s.year);
+  const equity = snaps.map(s => s.equity / 1e7);
+  const debt   = snaps.map(s => s.debt   / 1e7);
+  const liquid = snaps.map(s => s.liquid / 1e7);
 
-  let eq = (s.portfolioBreakup?.Equity?.Amount || 0);
-  let db = (s.portfolioBreakup?.Debt?.Amount   || 0);
-  let lq = (s.portfolioBreakup?.Liquid?.Amount || 0);
-
-  const primGrowth   = (s.incomeParams?.[0]?.value        || 8) / 100;
-  const spouseGrowth = (s.spouse?.incomeParams?.[0]?.value || 8) / 100;
-  const expGrowth    = (s.expenseParams?.[0]?.value        || 6) / 100;
-
-  let primInc   = s.monthlyIncome * 12;
-  let spouseInc = (s.spouse?.monthlyIncome || 0) * 12;
-  let expense   = s.monthlyExpense * 12;
-  const totalSIP = (s.sips || []).reduce((a, b) => a + b.amount, 0) * 12;
-
-  for (let y = startYear; y <= endYear; y++) {
-    years.push(y);
-    equity.push(eq / 1e7);
-    debt.push(db / 1e7);
-    liquid.push(lq / 1e7);
-
-    const activePrim   = y < primaryRetireYear;
-    const activeSpouse = spouseRetireYear ? y < spouseRetireYear : false;
-    const activeIncome = (activePrim ? primInc : 0) + (activeSpouse ? spouseInc : 0);
-    const anyWorking   = activePrim || activeSpouse;
-    const surplus      = anyWorking ? Math.max(0, activeIncome - expense - totalSIP) : 0;
-
-    eq = eq * 1.12 + surplus * 0.70;
-    db = db * 1.08 + surplus * 0.20;
-    lq = lq * 1.06 + surplus * 0.10;
-
-    if (!anyWorking) {
-      const draw  = expense;
-      const total = eq + db + lq;
-      if (total > 0) {
-        eq = Math.max(0, eq - draw * eq / total);
-        db = Math.max(0, db - draw * db / total);
-        lq = Math.max(0, lq - draw * lq / total);
-      }
-    }
-
-    if (activePrim)   primInc   *= (1 + primGrowth);
-    if (activeSpouse) spouseInc *= (1 + spouseGrowth);
-    expense *= (1 + expGrowth);
-  }
-
-  // Build retirement marker shapes + annotations
+  // Retirement marker shapes + annotations
   const shapes = [{
     type: 'line', x0: primaryRetireYear, x1: primaryRetireYear, y0: 0, y1: 1,
     xref: 'x', yref: 'paper', line: { color: '#fb923c', width: 1.5, dash: 'dot' },
   }];
   const annotations = [{
     x: primaryRetireYear, y: 1, xref: 'x', yref: 'paper',
-    text: 'Arjun retires', showarrow: false,
-    font: { color: '#fb923c', size: 10 }, yanchor: 'bottom',
+    text: currentScenario?.spouse ? 'Arjun retires' : 'Retirement',
+    showarrow: false, font: { color: '#fb923c', size: 10 }, yanchor: 'bottom',
   }];
   if (spouseRetireYear && spouseRetireYear !== primaryRetireYear) {
     shapes.push({
