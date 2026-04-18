@@ -10,12 +10,12 @@ import (
 // ReturnAssumptions defines the mean and standard deviation for
 // each asset class return. Defaults model Indian market history.
 type ReturnAssumptions struct {
-	EquityMean  float64 // % p.a., default 12.0
-	EquitySigma float64 // % p.a., default 8.0
-	DebtMean    float64 // default 7.0
-	DebtSigma   float64 // default 2.0
-	LiquidMean  float64 // default 3.5
-	LiquidSigma float64 // default 0.5
+	EquityMean     float64 // % p.a., default 12.0
+	EquitySigma    float64 // % p.a., default 8.0
+	DebtMean       float64 // default 7.0
+	DebtSigma      float64 // default 2.0
+	LiquidMean     float64 // default 3.5
+	LiquidSigma    float64 // default 0.5
 	InflationMean  float64 // default 6.0
 	InflationSigma float64 // default 1.5
 }
@@ -34,103 +34,112 @@ func DefaultReturnAssumptions() ReturnAssumptions {
 	}
 }
 
-// RunMonteCarlo runs the financial plan `runs` times with perturbed
-// return assumptions and returns probability bands per goal.
-//
-// Goroutines are used for parallelism — each run is independent.
-// On an 8-core machine, 1000 runs typically complete in ~200ms.
+// simRates holds perturbed per-asset return rates for a single simulation run.
+type simRates struct {
+	equity float64
+	debt   float64
+	liquid float64
+}
+
+// RunMonteCarlo runs the financial plan `runs` times with perturbed return
+// assumptions and returns goal probability bands plus a year-by-year net
+// worth trajectory at P25/P50/P75.
 func RunMonteCarlo(p PlanParams, runs int, assumptions ReturnAssumptions) MonteCarloResult {
 	if runs <= 0 {
 		runs = 500
 	}
 
 	type runResult struct {
-		idx    int
-		result PlanResult
+		idx       int
+		plan      PlanResult
+		snapshots []YearlySnapshot
 	}
 
-	results := make([]PlanResult, runs)
-	var wg sync.WaitGroup
 	ch := make(chan runResult, runs)
+	var wg sync.WaitGroup
 
 	for i := 0; i < runs; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			perturbed := perturbParams(p, assumptions)
-			ch <- runResult{idx, RunPlan(perturbed)}
+			perturbed, rates := perturbParamsAndRates(p, assumptions)
+			plan := RunPlan(perturbed)
+			proj := runProjectionWithRates(perturbed, rates.equity, rates.debt, rates.liquid)
+			ch <- runResult{idx, plan, proj.Snapshots}
 		}(i)
 	}
+	go func() { wg.Wait(); close(ch) }()
 
-	// Close channel when all goroutines finish
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-
+	planResults  := make([]PlanResult, runs)
+	allSnapshots := make([][]YearlySnapshot, runs)
 	for r := range ch {
-		results[r.idx] = r.result
+		planResults[r.idx]  = r.plan
+		allSnapshots[r.idx] = r.snapshots
 	}
 
-	// Run the deterministic plan once with exact assumptions
-	deterministic := RunPlan(p)
-
-	// Aggregate results per goal
-	goalProbabilities := aggregateGoalProbabilities(deterministic, results)
+	deterministic     := RunPlan(p)
+	goalProbabilities := aggregateGoalProbabilities(deterministic, planResults)
+	trajectoryBands   := computeTrajectoryBands(allSnapshots)
 
 	return MonteCarloResult{
 		Deterministic:     deterministic,
 		GoalProbabilities: goalProbabilities,
+		TrajectoryBands:   trajectoryBands,
 		Runs:              runs,
 	}
 }
 
-// perturbParams creates a copy of PlanParams with sampled return assumptions.
-// Equity, debt, and liquid returns are drawn from normal distributions.
-// Negative returns are allowed for equity (reflecting real market risk).
-func perturbParams(p PlanParams, a ReturnAssumptions) PlanParams {
-	// Sample returns for this simulation run
-	equityReturn := math.Max(a.EquityMean+normalSample()*a.EquitySigma, -20.0)
-	debtReturn   := math.Max(a.DebtMean+normalSample()*a.DebtSigma, 1.0)
-	liquidReturn := math.Max(a.LiquidMean+normalSample()*a.LiquidSigma, 1.0)
-	inflation    := math.Max(a.InflationMean+normalSample()*a.InflationSigma, 2.0)
+// perturbParamsAndRates samples return assumptions and returns both a modified
+// PlanParams (with sampled inflation applied to expenses) and the sampled rates.
+func perturbParamsAndRates(p PlanParams, a ReturnAssumptions) (PlanParams, simRates) {
+	eq  := math.Max(a.EquityMean+normalSample()*a.EquitySigma, -20.0)
+	db  := math.Max(a.DebtMean+normalSample()*a.DebtSigma, 1.0)
+	lq  := math.Max(a.LiquidMean+normalSample()*a.LiquidSigma, 1.0)
+	inf := math.Max(a.InflationMean+normalSample()*a.InflationSigma, 2.0)
 
-	// Override the global Projections for this goroutine's run
-	// by modifying the income/expense growth params
-	perturbed := p // shallow copy is fine — slices are not mutated
-
-	// Adjust expense growth to reflect sampled inflation
+	perturbed := p
 	perturbed.ExpenseParams = []GrowthParam{{
 		Range: p.ExpenseParams[0].Range,
-		Value: inflation,
+		Value: inf,
 	}}
-
-	// Adjust the allocation buckets to reflect sampled returns
-	// by scaling existing equity/debt/liquid returns proportionally
-	scale := func(buckets []AllocationBucket, eqR, dtR, lqR float64) []AllocationBucket {
-		out := make([]AllocationBucket, len(buckets))
-		for i, b := range buckets {
-			out[i] = b
-			// Store perturbed rates in a temporary global for this run
-			// (simplified approach: use weighted blended rate adjustment)
-			_ = b.Equity*eqR + b.Debt*dtR + b.Liquid*lqR
-		}
-		return out
-	}
-
-	// The cleanest approach: override Projections for this run
-	// We achieve this by passing a perturbedProjections struct.
-	// For now we store as a note — the full implementation injects
-	// these into FinancialSolution via the growth rate computation.
-	// TODO: inject perturbed rates into blendedGrowthRate via context.
-	perturbed.AssetAllocation = scale(p.AssetAllocation, equityReturn, debtReturn, liquidReturn)
-	perturbed.RetirementAssetAllocation = scale(p.RetirementAssetAllocation, equityReturn, debtReturn, liquidReturn)
-
-	return perturbed
+	return perturbed, simRates{eq, db, lq}
 }
 
-// aggregateGoalProbabilities computes success probability and
-// percentile outcomes for each goal across all Monte Carlo runs.
+// perturbParams is the legacy wrapper kept for backward compatibility.
+func perturbParams(p PlanParams, a ReturnAssumptions) PlanParams {
+	pp, _ := perturbParamsAndRates(p, a)
+	return pp
+}
+
+// computeTrajectoryBands transposes per-run snapshots into per-year P25/P50/P75 bands.
+func computeTrajectoryBands(allSnapshots [][]YearlySnapshot) []TrajectoryYear {
+	if len(allSnapshots) == 0 || len(allSnapshots[0]) == 0 {
+		return nil
+	}
+	n      := len(allSnapshots[0])
+	bands  := make([]TrajectoryYear, n)
+	totals := make([]float64, 0, len(allSnapshots))
+
+	for j := 0; j < n; j++ {
+		totals = totals[:0]
+		for _, snaps := range allSnapshots {
+			if j < len(snaps) {
+				totals = append(totals, snaps[j].Total)
+			}
+		}
+		sort.Float64s(totals)
+		bands[j] = TrajectoryYear{
+			Year: allSnapshots[0][j].Year,
+			P25:  percentile(totals, 25),
+			P50:  percentile(totals, 50),
+			P75:  percentile(totals, 75),
+		}
+	}
+	return bands
+}
+
+// aggregateGoalProbabilities computes success probability and percentile
+// outcomes for each goal across all Monte Carlo runs.
 func aggregateGoalProbabilities(
 	deterministic PlanResult,
 	runs []PlanResult,
@@ -192,8 +201,8 @@ func percentile(sorted []float64, p float64) float64 {
 		return 0
 	}
 	idx := (p / 100) * float64(len(sorted)-1)
-	lo := int(math.Floor(idx))
-	hi := int(math.Ceil(idx))
+	lo  := int(math.Floor(idx))
+	hi  := int(math.Ceil(idx))
 	if lo == hi {
 		return sorted[lo]
 	}
@@ -201,7 +210,6 @@ func percentile(sorted []float64, p float64) float64 {
 }
 
 // normalSample returns a single standard normal sample using Box-Muller.
-// Each call is independent — safe for concurrent goroutines via rand package.
 func normalSample() float64 {
 	u1 := rand.Float64()
 	u2 := rand.Float64()

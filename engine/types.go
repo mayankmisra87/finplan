@@ -239,9 +239,19 @@ type GoalProbability struct {
 	DeterministicTag    GoalTag `json:"deterministicTag"`
 }
 
-// MonteCarloResult wraps the deterministic plan with probability bands.
+// TrajectoryYear holds the P25/P50/P75 total net worth for a single calendar year
+// across all Monte Carlo simulation runs.
+type TrajectoryYear struct {
+	Year int     `json:"year"`
+	P25  float64 `json:"p25"`
+	P50  float64 `json:"p50"`
+	P75  float64 `json:"p75"`
+}
+
+// MonteCarloResult wraps the deterministic plan with probability bands and trajectory.
 type MonteCarloResult struct {
 	Deterministic     PlanResult        `json:"deterministic"`
 	GoalProbabilities []GoalProbability `json:"goalProbabilities"`
+	TrajectoryBands   []TrajectoryYear  `json:"trajectoryBands"`
 	Runs              int               `json:"runs"`
 }

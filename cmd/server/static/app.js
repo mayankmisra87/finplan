@@ -381,6 +381,8 @@ async function runMonteCarlo() {
 function renderMonteCarlo() {
   if (!mcResult) return;
 
+  renderTrajectoryBands();
+
   // Goal probability bars
   const probs = mcResult.goalProbabilities || [];
   document.getElementById('mc-probs').innerHTML = probs.map(gp => `
@@ -417,6 +419,64 @@ function renderMonteCarlo() {
   }, { responsive: true, displayModeBar: false });
 
   document.getElementById('mc-runs').textContent = `Based on ${mcResult.runs} simulations`;
+}
+
+// ── Monte Carlo trajectory band chart ─────────────────────────────────────────
+function renderTrajectoryBands() {
+  const bands = mcResult?.trajectoryBands;
+  if (!bands?.length) return;
+
+  const years = bands.map(b => b.year);
+  const p25   = bands.map(b => b.p25 / 1e7);
+  const p50   = bands.map(b => b.p50 / 1e7);
+  const p75   = bands.map(b => b.p75 / 1e7);
+
+  // Overlay the deterministic projection as a reference line
+  const det       = projectionResult?.snapshots || [];
+  const detYears  = det.map(s => s.year);
+  const detTotals = det.map(s => s.total / 1e7);
+
+  const retYear    = projectionResult?.primaryRetireYear;
+  const spouseYear = projectionResult?.spouseRetireYear;
+  const shapes = [], annotations = [];
+  if (retYear) {
+    shapes.push({ type:'line', x0:retYear, x1:retYear, y0:0, y1:1,
+      xref:'x', yref:'paper', line:{ color:'#fb923c', width:1, dash:'dot' } });
+    annotations.push({ x:retYear, y:1, xref:'x', yref:'paper',
+      text: currentScenario?.spouse ? 'Arjun retires' : 'Retirement',
+      showarrow:false, font:{ color:'#fb923c', size:9 }, yanchor:'bottom' });
+  }
+  if (spouseYear && spouseYear !== retYear) {
+    shapes.push({ type:'line', x0:spouseYear, x1:spouseYear, y0:0, y1:1,
+      xref:'x', yref:'paper', line:{ color:'#a78bfa', width:1, dash:'dot' } });
+    annotations.push({ x:spouseYear, y:0.9, xref:'x', yref:'paper',
+      text:'Priya retires', showarrow:false,
+      font:{ color:'#a78bfa', size:9 }, yanchor:'bottom' });
+  }
+
+  Plotly.newPlot('mc-trajectory-chart', [
+    // Invisible lower bound — needed as fill baseline
+    { x:years, y:p25, name:'P25', type:'scatter', mode:'lines',
+      line:{ color:'transparent', width:0 }, showlegend:false, hoverinfo:'skip' },
+    // Filled P25–P75 band
+    { x:years, y:p75, name:'P25–P75 range', type:'scatter', mode:'lines',
+      fill:'tonexty', fillcolor:'rgba(99,102,241,0.15)',
+      line:{ color:'transparent', width:0 } },
+    // P50 median
+    { x:years, y:p50, name:'P50 median', type:'scatter', mode:'lines',
+      line:{ color:'#818cf8', width:2 } },
+    // Deterministic baseline
+    { x:detYears, y:detTotals, name:'Deterministic', type:'scatter', mode:'lines',
+      line:{ color:'#4ade80', width:1.5, dash:'dot' } },
+  ], {
+    paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    font:{ color:'#e2e2f0', size:11 },
+    xaxis:{ gridcolor:'#3b3b52', title:'Year' },
+    yaxis:{ gridcolor:'#3b3b52', title:'Net Worth (₹ Cr)' },
+    legend:{ bgcolor:'transparent' },
+    shapes, annotations,
+    margin:{ t:10, r:20, b:50, l:60 },
+  }, { responsive:true, displayModeBar:false });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

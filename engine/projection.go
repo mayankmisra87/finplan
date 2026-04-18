@@ -24,18 +24,14 @@ type ProjectionResult struct {
 	SpouseRetireYear  int              `json:"spouseRetireYear,omitempty"`
 }
 
-// RunProjection returns a year-by-year net worth projection.
-//
-// It is an approximation — not the full waterfall — designed to produce
-// a realistic portfolio trajectory for the Net Worth chart.  It models:
-//   - Combined household income (each earner stops at their own retirement)
-//   - Household expenses and loan EMIs
-//   - SIP contributions (stop when the last earner retires)
-//   - One-time goal costs deducted from the portfolio in the goal year
-//   - EPF / PPF / NPS maturity lump sums added at each person's retirement
-//   - NPS annuity income offsetting post-retirement drawdown
-//   - Portfolio growth at blended rates per asset class
+// RunProjection returns a year-by-year net worth projection using default return rates.
 func RunProjection(p PlanParams) ProjectionResult {
+	return runProjectionWithRates(p, Projections["equity"], Projections["debt"], Projections["liquid"])
+}
+
+// runProjectionWithRates is the inner projection loop with explicit per-asset growth rates,
+// allowing Monte Carlo to substitute perturbed rates without touching global state.
+func runProjectionWithRates(p PlanParams, eqRate, dbRate, lqRate float64) ProjectionResult {
 	today     := todayFirstOfMonth()
 	startYear := today.Year()
 	dobDate   := parseDate(p.DOB)
@@ -236,9 +232,9 @@ func RunProjection(p PlanParams) ProjectionResult {
 		lq += surplus * aLq
 
 		// Grow each bucket at its long-run expected rate
-		eq *= (1 + Projections["equity"]/100)
-		db *= (1 + Projections["debt"]/100)
-		lq *= (1 + Projections["liquid"]/100)
+		eq *= (1 + eqRate/100)
+		db *= (1 + dbRate/100)
+		lq *= (1 + lqRate/100)
 
 		// Post-retirement: draw down to cover expenses net of annuity income
 		if y >= lastRetireYear {
