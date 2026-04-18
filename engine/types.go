@@ -28,6 +28,7 @@ type Goal struct {
 	ID                int     `json:"id"`
 	Name              string  `json:"name"`
 	Icon              string  `json:"icon"`
+	OwnerID           string  `json:"ownerID,omitempty"` // "primary", "spouse", "joint"; empty = primary
 	StartDate         string  `json:"start_date"`
 	EndDate           string  `json:"end_date"`
 	OriginalStartDate string  `json:"original_start_date"`
@@ -38,6 +39,16 @@ type Goal struct {
 	LoanTenure        int     `json:"loan_tenure"`    // years
 	LoanInterestRate  float64 `json:"loan_interest_rate"`
 	Priority          int     `json:"priority"` // 1 = highest (new field, used in two-pass)
+}
+
+// SpouseMember holds the second person's income and retirement parameters
+// for a dual-income household plan.
+type SpouseMember struct {
+	DOB                      string               `json:"dob"`
+	RetirementAge            int                  `json:"retirementAge"`
+	MonthlyIncome            float64              `json:"monthlyIncome"`
+	IncomeParams             []GrowthParam        `json:"incomeParams"`
+	RetirementBasedCashflows []RetirementCashflow `json:"retirementBasedCashflows"`
 }
 
 // Income is a recurring extra income stream (rental, freelance, etc.)
@@ -124,6 +135,7 @@ type PlanParams struct {
 	CurrentPortfolioValue     float64            `json:"currentPortfolioValue"`
 	PortfolioBreakup          PortfolioBreakup   `json:"portfolioBreakup"`
 	RetirementBasedCashflows  []RetirementCashflow `json:"retirementBasedCashflows"`
+	Spouse                    *SpouseMember      `json:"spouse,omitempty"`
 }
 
 // ─────────────────────────────────────────────

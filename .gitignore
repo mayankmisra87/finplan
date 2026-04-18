@@ -1,4 +1,4 @@
 finplan
-server
+/server
 *.test
 *.out

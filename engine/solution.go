@@ -35,7 +35,7 @@ import (
 type goalFundingState struct {
 	currentDate     time.Time
 	remainingPortfolio float64
-	currentIncome   float64
+	streams         []incomeStream // one entry per income earner
 	currentExpense  float64
 	currentSip      float64
 	currentYear     int
@@ -70,6 +70,36 @@ type windfall struct {
 	Name      string
 	Amount    float64
 	StartDate string
+}
+
+// incomeStream represents one person's earned income with their own growth
+// schedule and retirement date.  A slice of these lets the savings loop
+// handle two-income households: each stream retires independently, and SIP
+// stops only when all streams have retired.
+type incomeStream struct {
+	current        float64
+	growthByYear   map[int]float64
+	retirementDate time.Time
+	retired        bool
+}
+
+func totalActiveIncome(streams []incomeStream) float64 {
+	total := 0.0
+	for _, s := range streams {
+		if !s.retired {
+			total += s.current
+		}
+	}
+	return total
+}
+
+func allStreamsRetired(streams []incomeStream) bool {
+	for _, s := range streams {
+		if !s.retired {
+			return false
+		}
+	}
+	return true
 }
 
 type savingsEntry struct {
@@ -126,10 +156,12 @@ type interestEntry struct {
 // amount, ensuring the remainder is preserved for retirement.  Pass nil
 // to fall back to the original greedy allocation behaviour.
 func FinancialSolution(
-	retirementAge, lifeExpectancy int,
+	retirementDate time.Time,
+	lifeExpectancy int,
 	currentPortfolioValue, initialLiquidAmount float64,
-	monthlyIncome, monthlyExpense, retirementExpense float64,
-	incomeGrowth, expenseGrowth map[int]float64,
+	streams []incomeStream,
+	monthlyExpense, retirementExpense float64,
+	expenseGrowth map[int]float64,
 	portfolioParams []PortfolioParam,
 	dob string,
 	goals []Goal,
@@ -145,7 +177,6 @@ func FinancialSolution(
 	today := todayFirstOfMonth()
 	dobDate := parseDate(dob)
 	endDate := dobDate.AddDate(lifeExpectancy, 0, 0)
-	retirementDate := dobDate.AddDate(retirementAge, 0, 0)
 
 	// ── Compute retirement corpus target ───────────────────────────────────
 	// FIX #3: use the retirement goal's actual blended growth rate
@@ -174,7 +205,7 @@ func FinancialSolution(
 	// Walk from retirement to end of life, summing discounted expenses
 	retirementTargetExpense := 0.0
 	fvAccum := 1.0
-	retirementTrack := dobDate.AddDate(retirementAge, 0, 0)
+	retirementTrack := retirementDate
 	retirementTrack = addMonths(retirementTrack, 1)
 	trackYear := retirementTrack.Year()
 	currentRetExpense := retirementExpense
@@ -211,10 +242,15 @@ func FinancialSolution(
 	sipSchedule := []SIPSchedule{}
 	sipScheduleByYear := map[int]bool{}
 
+	// Deep-copy streams so the waterfall can mutate current/retired fields
+	// without affecting the caller's slice.
+	streamsCopy := make([]incomeStream, len(streams))
+	copy(streamsCopy, streams)
+
 	state := &goalFundingState{
 		currentDate:        today,
 		remainingPortfolio: currentPortfolioValue,
-		currentIncome:      monthlyIncome,
+		streams:            streamsCopy,
 		currentExpense:     monthlyExpense,
 		currentSip:         totalSipAmount,
 		currentYear:        today.Year(),
@@ -322,9 +358,11 @@ func FinancialSolution(
 
 			// Year rollover: update income, expense, extra income growth
 			if state.currentYear != state.currentDate.Year() {
-				if !isRetired {
-					if rate, ok := incomeGrowth[state.currentYear]; ok {
-						state.currentIncome *= (1 + rate/100)
+				for j := range state.streams {
+					if !state.streams[j].retired {
+						if rate, ok := state.streams[j].growthByYear[state.currentYear]; ok {
+							state.streams[j].current *= (1 + rate/100)
+						}
 					}
 				}
 				if rate, ok := expenseGrowth[state.currentYear]; ok {
@@ -339,9 +377,13 @@ func FinancialSolution(
 				state.currentYear = state.currentDate.Year()
 			}
 
-			// Retirement transition
-			if state.currentDate.After(retirementDate) && !isRetired {
-				state.currentIncome = 0
+			// Per-stream retirement: each earner stops on their own date.
+			for j := range state.streams {
+				if !state.streams[j].retired && state.currentDate.After(state.streams[j].retirementDate) {
+					state.streams[j].retired = true
+				}
+			}
+			if !isRetired && allStreamsRetired(state.streams) {
 				state.currentSip = 0
 				isRetired = true
 			}
@@ -351,8 +393,8 @@ func FinancialSolution(
 				currentFV = ya.FV
 			}
 
-			// Compute monthly saving
-			monthlySaving := state.currentIncome - state.currentExpense
+			// Compute monthly saving from all active income streams
+			monthlySaving := totalActiveIncome(state.streams) - state.currentExpense
 			if emi, ok := loanEmis[stringDate]; ok {
 				monthlySaving -= emi
 			}

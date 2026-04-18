@@ -186,6 +186,79 @@ func RunPlan(p PlanParams) PlanResult {
 	incomeGrowth := buildGrowthMap(p.IncomeParams, today.Year(), endYear)
 	expenseGrowth := buildGrowthMap(p.ExpenseParams, today.Year(), endYear)
 
+	// ── 5b. Build household income streams ───────────────────────────────
+	// Each stream carries its own growth schedule and retirement date so the
+	// engine can handle two-income households where each person retires
+	// independently.
+	streams := []incomeStream{
+		{
+			current:        p.MonthlyIncome,
+			growthByYear:   incomeGrowth,
+			retirementDate: parseDate(retirementDateStr),
+		},
+	}
+	if p.Spouse != nil {
+		spouseDOB := parseDate(p.Spouse.DOB)
+		spouseRetDate := spouseDOB.AddDate(p.Spouse.RetirementAge, 0, 0)
+		if spouseRetDate.Before(today) {
+			spouseRetDate = today
+		}
+		spouseRetDateStr := formatDate(spouseRetDate)
+		spouseN := math.Max(0, float64(spouseRetDate.Year()-today.Year()))
+		spouseIncomeGrowth := buildGrowthMap(p.Spouse.IncomeParams, today.Year(), endYear)
+
+		streams = append(streams, incomeStream{
+			current:        p.Spouse.MonthlyIncome,
+			growthByYear:   spouseIncomeGrowth,
+			retirementDate: spouseRetDate,
+		})
+
+		// Process spouse's retirement cashflows (PPF / EPF / NPS) using
+		// the spouse's own retirement date and growth horizon.
+		for _, rc := range p.Spouse.RetirementBasedCashflows {
+			switch rc.AssetType {
+			case "PPF":
+				interest := rc.MarketValue * (math.Pow(1+PPFRate, spouseN) - 1)
+				portfolioParams = append(portfolioParams, PortfolioParam{
+					ID: rc.ID, AssetType: "PPF",
+					MaturityDate: spouseRetDateStr, MaturityAmount: rc.MarketValue,
+					IsBreakable: true,
+					Interests:   []Interest{{Date: spouseRetDateStr, Amount: interest}},
+				})
+			case "EPF":
+				contrib := rc.EPFLastContribution
+				if contrib == 0 {
+					contrib = 60000
+				}
+				interest := fv(EPFRate, spouseN, contrib, rc.MarketValue) - rc.MarketValue
+				portfolioParams = append(portfolioParams, PortfolioParam{
+					ID: rc.ID, AssetType: "EPF",
+					MaturityDate: spouseRetDateStr, MaturityAmount: rc.MarketValue,
+					IsBreakable: false,
+					Interests:   []Interest{{Date: spouseRetDateStr, Amount: interest}},
+				})
+			case "NPS":
+				contrib := rc.NPSLastContribution
+				if contrib == 0 {
+					contrib = 60000
+				}
+				npsCorpus := fv(NPSRate, spouseN, contrib, rc.MarketValue)
+				lumpsum := npsCorpus * NPSLumpsumFraction
+				portfolioParams = append(portfolioParams, PortfolioParam{
+					ID: rc.ID, AssetType: "NPS",
+					MaturityDate: spouseRetDateStr, MaturityAmount: lumpsum,
+					IsBreakable: true, Interests: []Interest{},
+				})
+				annuityCorpus := npsCorpus * NPSAnnuityFraction
+				monthlyAnnuity := annuityCorpus * NPSAnnuityRate / 12
+				npsAnnuityItems = append(npsAnnuityItems, extraIncomeItem{
+					ID: rc.ID, Name: "NPS Annuity (Spouse)", Amount: monthlyAnnuity,
+					Growth: 0, StartDate: spouseRetDateStr, EndDate: lifeExpEndDate,
+				})
+			}
+		}
+	}
+
 	// Compute retirement expense (what monthly expense will be at retirement)
 	retirementExpense := buildRetirementExpense(
 		p.MonthlyExpense, p.ExpenseParams, today.Year(),
@@ -253,16 +326,14 @@ func RunPlan(p PlanParams) PlanResult {
 		goals,
 		goalsAllocation,
 		p.CurrentPortfolioValue,
-		p.MonthlyIncome,
+		streams,
 		p.MonthlyExpense,
-		incomeGrowth,
 		expenseGrowth,
 		portfolioParams,
 		wfList,
 		loanEmis,
 		totalSip,
 		extraIncomeItems,
-		retirementDate,
 		avgExpenseGrowth,
 	)
 
@@ -271,11 +342,13 @@ func RunPlan(p PlanParams) PlanResult {
 	// retirement's reserved share stays in remainingPortfolio until the
 	// retirement goal is processed.
 	goalResults, sipSchedule := FinancialSolution(
-		p.RetirementAge, p.LifeExpectancy,
+		parseDate(retirementDateStr),
+		p.LifeExpectancy,
 		p.CurrentPortfolioValue,
 		0, // initialLiquidAmount (windfalls handled separately)
-		p.MonthlyIncome, p.MonthlyExpense, retirementExpense,
-		incomeGrowth, expenseGrowth,
+		streams,
+		p.MonthlyExpense, retirementExpense,
+		expenseGrowth,
 		portfolioParams,
 		p.DOB,
 		goals,

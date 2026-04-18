@@ -1,23 +1,13 @@
 {
   "dob": "1991-01-01",
   "retirementAge": 60,
-  "lifeExpectancy": 85,
-  "monthlyIncome": 500000,
+  "lifeExpectancy": 87,
+  "monthlyIncome": 420000,
   "monthlyExpense": 120000,
   "incomeParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 8 }],
   "expenseParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 6 }],
   "incomes": [],
-  "loans": [
-    {
-      "id": 101,
-      "name": "Home Loan",
-      "principal": 10000000,
-      "emi": 90000,
-      "interest_rate": 8.5,
-      "tenure_months": 240,
-      "start_date": "2026-07-01"
-    }
-  ],
+  "loans": [],
   "sips": [
     {
       "id": 1, "name": "Arjun Equity SIP", "amount": 50000,
@@ -30,63 +20,63 @@
   ],
   "goals": [
     {
-      "id": 9001, "name": "Retirement", "icon": "default",
+      "id": 9001, "name": "Retirement", "icon": "default", "ownerID": "joint",
       "start_date": "R", "end_date": "L",
       "original_start_date": "R", "original_end_date": "L",
       "target_amount": 0, "is_loan": false,
       "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
     },
     {
-      "id": 9002, "name": "Emergency Fund", "icon": "default",
+      "id": 9002, "name": "Emergency Fund", "icon": "default", "ownerID": "joint",
       "start_date": "2026-07-01", "end_date": "2026-07-01",
       "original_start_date": "2026-07-01", "original_end_date": "2026-07-01",
       "target_amount": 720000, "is_loan": false,
       "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 1
     },
     {
-      "id": 1, "name": "Home Purchase", "icon": "home",
+      "id": 1, "name": "Home Purchase", "icon": "home", "ownerID": "joint",
       "start_date": "2026-07-01", "end_date": "2026-07-01",
       "original_start_date": "2026-07-01", "original_end_date": "2026-07-01",
       "target_amount": 15000000, "is_loan": true,
-      "down_payment": 5000000, "loan_tenure": 240, "loan_interest_rate": 8.5, "priority": 2
+      "down_payment": 33, "loan_tenure": 20, "loan_interest_rate": 8.5, "priority": 2
     },
     {
-      "id": 2, "name": "Arjun's Car", "icon": "car",
+      "id": 2, "name": "Arjun's Car", "icon": "car", "ownerID": "primary",
       "start_date": "2028-01-01", "end_date": "2028-01-01",
       "original_start_date": "2028-01-01", "original_end_date": "2028-01-01",
       "target_amount": 700000, "is_loan": false,
       "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 3
     },
     {
-      "id": 3, "name": "Vacation 2027", "icon": "travel",
+      "id": 3, "name": "Vacation 2027", "icon": "travel", "ownerID": "joint",
       "start_date": "2027-06-01", "end_date": "2027-06-01",
       "original_start_date": "2027-06-01", "original_end_date": "2027-06-01",
       "target_amount": 300000, "is_loan": false,
       "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 3
     },
     {
-      "id": 4, "name": "Vacation 2030", "icon": "travel",
+      "id": 4, "name": "Vacation 2030", "icon": "travel", "ownerID": "joint",
       "start_date": "2030-06-01", "end_date": "2030-06-01",
       "original_start_date": "2030-06-01", "original_end_date": "2030-06-01",
       "target_amount": 300000, "is_loan": false,
       "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 3
     },
     {
-      "id": 5, "name": "Vacation 2033", "icon": "travel",
+      "id": 5, "name": "Vacation 2033", "icon": "travel", "ownerID": "joint",
       "start_date": "2033-06-01", "end_date": "2033-06-01",
       "original_start_date": "2033-06-01", "original_end_date": "2033-06-01",
       "target_amount": 300000, "is_loan": false,
       "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 3
     },
     {
-      "id": 6, "name": "Priya's Car", "icon": "car",
+      "id": 6, "name": "Priya's Car", "icon": "car", "ownerID": "spouse",
       "start_date": "2032-01-01", "end_date": "2032-01-01",
       "original_start_date": "2032-01-01", "original_end_date": "2032-01-01",
       "target_amount": 1200000, "is_loan": false,
       "down_payment": 0, "loan_tenure": 0, "loan_interest_rate": 0, "priority": 3
     },
     {
-      "id": 7, "name": "Child Education", "icon": "kids-education",
+      "id": 7, "name": "Child Education", "icon": "kids-education", "ownerID": "joint",
       "start_date": "2040-06-01", "end_date": "2040-06-01",
       "original_start_date": "2040-06-01", "original_end_date": "2040-06-01",
       "target_amount": 5000000, "is_loan": false,
@@ -113,5 +103,14 @@
   "retirementBasedCashflows": [
     { "id": 201, "asset_type": "EPF", "market_value": 500000, "epf_last_contribution": 180000 },
     { "id": 202, "asset_type": "PPF", "market_value": 200000, "epf_last_contribution": 0 }
-  ]
+  ],
+  "spouse": {
+    "dob": "1994-01-01",
+    "retirementAge": 57,
+    "monthlyIncome": 250000,
+    "incomeParams": [{ "range": ["2020-01-01", "2200-01-01"], "value": 9 }],
+    "retirementBasedCashflows": [
+      { "id": 301, "asset_type": "EPF", "market_value": 300000, "epf_last_contribution": 120000 }
+    ]
+  }
 }

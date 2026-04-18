@@ -100,7 +100,7 @@ function renderSummary() {
     </div>
     <div class="summary-card">
       <div class="text-xs text-gray-400 mb-1">Monthly surplus</div>
-      <div class="text-xl font-bold text-blue-300">${fmt(currentScenario.monthlyIncome - currentScenario.monthlyExpense)}<span class="text-sm font-normal text-gray-400">/mo</span></div>
+      <div class="text-xl font-bold text-blue-300">${fmt((currentScenario.monthlyIncome + (currentScenario.spouse?.monthlyIncome || 0)) - currentScenario.monthlyExpense)}<span class="text-sm font-normal text-gray-400">/mo</span></div>
     </div>
   `;
 }
@@ -170,26 +170,28 @@ function renderNetWorth() {
   const s = currentScenario;
   if (!s) return;
 
-  // Build a simple year-by-year projection from the portfolio breakdown
-  const today = new Date();
-  const retireYear = (new Date(s.dob).getFullYear()) + s.retirementAge;
-  const endYear    = (new Date(s.dob).getFullYear()) + s.lifeExpectancy;
+  const today      = new Date();
   const startYear  = today.getFullYear();
+  const primaryRetireYear = (new Date(s.dob).getFullYear()) + s.retirementAge;
+  const spouseRetireYear  = s.spouse
+    ? (new Date(s.spouse.dob).getFullYear()) + s.spouse.retirementAge
+    : null;
+  // Use the longer-lived person's life expectancy end year
+  const endYear = (new Date(s.dob).getFullYear()) + s.lifeExpectancy;
 
-  const years   = [];
-  const equity  = [];
-  const debt    = [];
-  const liquid  = [];
+  const years  = [], equity = [], debt = [], liquid = [];
 
   let eq = (s.portfolioBreakup?.Equity?.Amount || 0);
   let db = (s.portfolioBreakup?.Debt?.Amount   || 0);
   let lq = (s.portfolioBreakup?.Liquid?.Amount || 0);
 
-  const incomeGrowth  = (s.incomeParams?.[0]?.value  || 8) / 100;
-  const expenseGrowth = (s.expenseParams?.[0]?.value || 6) / 100;
+  const primGrowth   = (s.incomeParams?.[0]?.value        || 8) / 100;
+  const spouseGrowth = (s.spouse?.incomeParams?.[0]?.value || 8) / 100;
+  const expGrowth    = (s.expenseParams?.[0]?.value        || 6) / 100;
 
-  let income  = s.monthlyIncome  * 12;
-  let expense = s.monthlyExpense * 12;
+  let primInc   = s.monthlyIncome * 12;
+  let spouseInc = (s.spouse?.monthlyIncome || 0) * 12;
+  let expense   = s.monthlyExpense * 12;
   const totalSIP = (s.sips || []).reduce((a, b) => a + b.amount, 0) * 12;
 
   for (let y = startYear; y <= endYear; y++) {
@@ -198,17 +200,18 @@ function renderNetWorth() {
     debt.push(db / 1e7);
     liquid.push(lq / 1e7);
 
-    const isRetired = y >= retireYear;
-    const surplus   = isRetired ? 0 : Math.max(0, income - expense - totalSIP);
+    const activePrim   = y < primaryRetireYear;
+    const activeSpouse = spouseRetireYear ? y < spouseRetireYear : false;
+    const activeIncome = (activePrim ? primInc : 0) + (activeSpouse ? spouseInc : 0);
+    const anyWorking   = activePrim || activeSpouse;
+    const surplus      = anyWorking ? Math.max(0, activeIncome - expense - totalSIP) : 0;
 
-    // Grow each bucket
-    eq = eq * 1.12 + (isRetired ? 0 : surplus * 0.70);
-    db = db * 1.08 + (isRetired ? 0 : surplus * 0.20);
-    lq = lq * 1.06 + (isRetired ? 0 : surplus * 0.10);
+    eq = eq * 1.12 + surplus * 0.70;
+    db = db * 1.08 + surplus * 0.20;
+    lq = lq * 1.06 + surplus * 0.10;
 
-    // Retirement drawdown (rough)
-    if (isRetired) {
-      const draw = expense;
+    if (!anyWorking) {
+      const draw  = expense;
       const total = eq + db + lq;
       if (total > 0) {
         eq = Math.max(0, eq - draw * eq / total);
@@ -217,8 +220,31 @@ function renderNetWorth() {
       }
     }
 
-    income  *= (1 + incomeGrowth);
-    expense *= (1 + expenseGrowth);
+    if (activePrim)   primInc   *= (1 + primGrowth);
+    if (activeSpouse) spouseInc *= (1 + spouseGrowth);
+    expense *= (1 + expGrowth);
+  }
+
+  // Build retirement marker shapes + annotations
+  const shapes = [{
+    type: 'line', x0: primaryRetireYear, x1: primaryRetireYear, y0: 0, y1: 1,
+    xref: 'x', yref: 'paper', line: { color: '#fb923c', width: 1.5, dash: 'dot' },
+  }];
+  const annotations = [{
+    x: primaryRetireYear, y: 1, xref: 'x', yref: 'paper',
+    text: 'Arjun retires', showarrow: false,
+    font: { color: '#fb923c', size: 10 }, yanchor: 'bottom',
+  }];
+  if (spouseRetireYear && spouseRetireYear !== primaryRetireYear) {
+    shapes.push({
+      type: 'line', x0: spouseRetireYear, x1: spouseRetireYear, y0: 0, y1: 1,
+      xref: 'x', yref: 'paper', line: { color: '#a78bfa', width: 1.5, dash: 'dot' },
+    });
+    annotations.push({
+      x: spouseRetireYear, y: 0.92, xref: 'x', yref: 'paper',
+      text: 'Priya retires', showarrow: false,
+      font: { color: '#a78bfa', size: 10 }, yanchor: 'bottom',
+    });
   }
 
   Plotly.newPlot('nw-chart', [
@@ -227,57 +253,58 @@ function renderNetWorth() {
     { x: years, y: liquid, name: 'Liquid', type: 'bar', marker: { color: '#34d399' } },
   ], {
     barmode: 'stack',
-    paper_bgcolor: 'transparent',
-    plot_bgcolor:  'transparent',
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     font: { color: '#e2e2f0', size: 11 },
     xaxis: { gridcolor: '#3b3b52', title: 'Year' },
     yaxis: { gridcolor: '#3b3b52', title: 'Net Worth (₹ Cr)' },
     legend: { bgcolor: 'transparent' },
-    shapes: [{
-      type: 'line', x0: retireYear, x1: retireYear, y0: 0, y1: 1,
-      xref: 'x', yref: 'paper',
-      line: { color: '#fb923c', width: 1.5, dash: 'dot' },
-    }],
-    annotations: [{
-      x: retireYear, y: 1, xref: 'x', yref: 'paper',
-      text: 'Retirement', showarrow: false,
-      font: { color: '#fb923c', size: 10 }, yanchor: 'bottom',
-    }],
+    shapes, annotations,
     margin: { t: 20, r: 20, b: 50, l: 60 },
   }, { responsive: true, displayModeBar: false });
 }
 
-// ── Cash Flow tab (simple income vs expense waterfall) ────────────────────────
+// ── Cash Flow tab (income vs expense waterfall) ────────────────────────────────
 function renderCashFlow() {
   const s = currentScenario;
   if (!s) return;
 
-  const today    = new Date();
-  const retireYear = (new Date(s.dob).getFullYear()) + s.retirementAge;
-  const startYear  = today.getFullYear();
-  const endYear    = retireYear + 5;
+  const today            = new Date();
+  const startYear        = today.getFullYear();
+  const primaryRetireYear = (new Date(s.dob).getFullYear()) + s.retirementAge;
+  const spouseRetireYear  = s.spouse
+    ? (new Date(s.spouse.dob).getFullYear()) + s.spouse.retirementAge
+    : null;
+  const lastRetireYear = Math.max(primaryRetireYear, spouseRetireYear || primaryRetireYear);
+  const endYear = lastRetireYear + 3;
 
-  const years   = [];
-  const incomes = [];
-  const exps    = [];
-  const surplus = [];
+  const years = [], incomes = [], exps = [], surplus = [];
 
-  let inc = s.monthlyIncome  * 12;
-  let exp = s.monthlyExpense * 12;
-  const incGrowth = (s.incomeParams?.[0]?.value  || 8) / 100;
-  const expGrowth = (s.expenseParams?.[0]?.value || 6) / 100;
-  const totalLoan = (s.loans || []).reduce((a, l) => a + (l.emi || 0), 0) * 12;
-  const totalSIP  = (s.sips  || []).reduce((a, b) => a + b.amount, 0) * 12;
+  let primInc   = s.monthlyIncome * 12;
+  let spouseInc = (s.spouse?.monthlyIncome || 0) * 12;
+  let exp       = s.monthlyExpense * 12;
+
+  const primGrowth   = (s.incomeParams?.[0]?.value        || 8) / 100;
+  const spouseGrowth = (s.spouse?.incomeParams?.[0]?.value || 8) / 100;
+  const expGrowth    = (s.expenseParams?.[0]?.value        || 6) / 100;
+  const totalLoan    = (s.loans || []).reduce((a, l) => a + (l.emi || 0), 0) * 12;
+  const totalSIP     = (s.sips  || []).reduce((a, b) => a + b.amount,     0) * 12;
 
   for (let y = startYear; y <= endYear; y++) {
-    const isRetired = y >= retireYear;
-    years.push(y);
-    incomes.push(isRetired ? 0 : inc / 1e5);
-    const totalExp = isRetired ? exp : exp + totalLoan + totalSIP;
-    exps.push(totalExp / 1e5);
-    surplus.push(isRetired ? -(exp / 1e5) : Math.max(0, inc - totalExp) / 1e5);
+    const activePrim   = y < primaryRetireYear;
+    const activeSpouse = spouseRetireYear ? y < spouseRetireYear : false;
+    const activeIncome = (activePrim ? primInc : 0) + (activeSpouse ? spouseInc : 0);
+    const anyWorking   = activePrim || activeSpouse;
 
-    inc *= (1 + incGrowth);
+    years.push(y);
+    incomes.push(activeIncome / 1e5);
+    const totalExp = anyWorking ? exp + totalLoan + totalSIP : exp;
+    exps.push(totalExp / 1e5);
+    surplus.push(anyWorking
+      ? Math.max(0, activeIncome - totalExp) / 1e5
+      : -(exp / 1e5));
+
+    if (activePrim)   primInc   *= (1 + primGrowth);
+    if (activeSpouse) spouseInc *= (1 + spouseGrowth);
     exp *= (1 + expGrowth);
   }
 

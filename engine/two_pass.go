@@ -23,16 +23,14 @@ func twoPassLumpsumAllocation(
 	goals []Goal,
 	goalsAllocation AllGoalsAllocation,
 	totalLumpsum float64,
-	monthlyIncome float64,
+	streams []incomeStream,
 	monthlyExpense float64,
-	incomeGrowth map[int]float64,
 	expenseGrowth map[int]float64,
 	portfolioParams []PortfolioParam,
 	windfalls []windfall,
 	loanEmis map[string]float64,
 	totalSipAmount float64,
 	extraIncomes []extraIncomeItem,
-	retirementDate time.Time,
 	avgExpenseGrowth float64,
 ) (map[int]float64, float64) {
 
@@ -68,11 +66,12 @@ func twoPassLumpsumAllocation(
 		// Pass 1: exact simulation of what savings alone can achieve.
 		// Mirrors FinancialSolution's savings loop — no lumpsum deducted.
 		savingsAchievable := simulateSavingsCoverage(
-			monthlyIncome, monthlyExpense,
-			incomeGrowth, expenseGrowth,
+			streams,
+			monthlyExpense,
+			expenseGrowth,
 			loanEmis, totalSipAmount, extraIncomes,
 			alloc, today, goalDate,
-			portfolioParams, windfalls, retirementDate,
+			portfolioParams, windfalls,
 		)
 
 		if savingsAchievable >= goalTarget {
@@ -114,9 +113,8 @@ func twoPassLumpsumAllocation(
 //   - maturing FD amounts and interest payouts are credited on their dates
 //     (non-breakable FDs are skipped until their maturity date)
 func simulateSavingsCoverage(
-	monthlyIncome float64,
+	streams []incomeStream,
 	monthlyExpense float64,
-	incomeGrowth map[int]float64,
 	expenseGrowth map[int]float64,
 	loanEmis map[string]float64,
 	totalSipAmount float64,
@@ -125,16 +123,17 @@ func simulateSavingsCoverage(
 	startDate, goalDate time.Time,
 	portfolioParams []PortfolioParam,
 	windfalls []windfall,
-	retirementDate time.Time,
 ) float64 {
 
 	total := 0.0
 	current := startDate
 	currentYear := startDate.Year()
-	income := monthlyIncome
 	expense := monthlyExpense
 	sip := totalSipAmount
-	isRetired := false
+
+	// Copy streams so this simulation doesn't mutate the caller's slice.
+	localStreams := make([]incomeStream, len(streams))
+	copy(localStreams, streams)
 
 	// Copy extra incomes so annual growth mutations stay local.
 	currentExtraIncomes := make([]extraIncomeItem, len(extraIncomes))
@@ -146,9 +145,11 @@ func simulateSavingsCoverage(
 
 		// Year rollover: apply income/expense/extra-income growth.
 		if yr != currentYear {
-			if !isRetired {
-				if rate, ok := incomeGrowth[currentYear]; ok {
-					income *= (1 + rate/100)
+			for j := range localStreams {
+				if !localStreams[j].retired {
+					if rate, ok := localStreams[j].growthByYear[currentYear]; ok {
+						localStreams[j].current *= (1 + rate/100)
+					}
 				}
 			}
 			if rate, ok := expenseGrowth[currentYear]; ok {
@@ -162,11 +163,14 @@ func simulateSavingsCoverage(
 			currentYear = yr
 		}
 
-		// Retirement transition: income and SIP stop.
-		if current.After(retirementDate) && !isRetired {
-			income = 0
+		// Per-stream retirement: each earner stops on their own date.
+		for j := range localStreams {
+			if !localStreams[j].retired && current.After(localStreams[j].retirementDate) {
+				localStreams[j].retired = true
+			}
+		}
+		if allStreamsRetired(localStreams) {
 			sip = 0
-			isRetired = true
 		}
 
 		currentFV := 1.0
@@ -175,7 +179,7 @@ func simulateSavingsCoverage(
 		}
 
 		// Monthly saving (mirrors FinancialSolution logic).
-		monthlySaving := income - expense
+		monthlySaving := totalActiveIncome(localStreams) - expense
 		if emi, ok := loanEmis[stringDate]; ok {
 			monthlySaving -= emi
 		}
